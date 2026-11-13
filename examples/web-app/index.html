@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CLI Tollgate: request access example</title>
+  <style>
+    body { font: 15px/1.5 system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 20px; color: #1f2937; }
+    button { font: inherit; padding: 8px 14px; border-radius: 6px; border: 1px solid #0f766e; background: #0f766e; color: #fff; cursor: pointer; }
+    button.secondary { background: transparent; color: #0f766e; }
+    button:disabled { opacity: .5; cursor: default; }
+    #status { margin: 16px 0; padding: 10px 12px; border-radius: 6px; background: #f3f4f6; }
+    pre { background: #f3f4f6; padding: 12px; border-radius: 6px; overflow: auto; max-height: 320px; }
+    code { font-family: ui-monospace, monospace; }
+  </style>
+</head>
+<body>
+  <h1>Request access example</h1>
+  <p>This page asks the CLI Tollgate app running on this computer for an API key. The app shows an
+     <b>Allow / Deny</b> prompt; once you allow it, the page calls the local proxy with its own key.</p>
+
+  <button id="connect">Connect CLI Tollgate</button>
+  <button id="models" class="secondary" disabled>List models</button>
+  <button id="forget" class="secondary">Forget key</button>
+  <div id="status">Not connected.</div>
+  <pre id="out" hidden></pre>
+
+  <script type="module">
+    // Copy this function into your web app. It resolves with the API key once
+    // the user clicks Allow, and throws if they deny or the request expires.
+    const TOLLGATE = "http://127.0.0.1:8317";
+
+    async function requestTollgateAccess({ name, baseURL = TOLLGATE, onPending } = {}) {
+      // The page generates its own key; it never has to be sent back.
+      const bytes = crypto.getRandomValues(new Uint8Array(24));
+      const key = "tg-app-" + Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+
+      const res = await fetch(`${baseURL}/access/requests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, key }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.status !== 202) throw new Error(body.error || `CLI Tollgate answered ${res.status}`);
+      onPending?.(body);
+
+      // Long-poll until the user answers (the server holds each call up to 55s).
+      for (;;) {
+        const r = await fetch(`${baseURL}/access/requests/${body.id}?wait=50`);
+        const { status, error } = await r.json();
+        if (!r.ok) throw new Error(error || `CLI Tollgate answered ${r.status}`);
+        if (status === "approved") return key;
+        if (status === "denied") throw new Error("Access was denied.");
+        if (status === "expired") throw new Error("The request expired before it was answered.");
+      }
+    }
+
+    // ---- Demo wiring -------------------------------------------------------
+    const params = new URLSearchParams(location.search);
+    const baseURL = params.get("base") || TOLLGATE;
+    const $ = (id) => document.getElementById(id);
+    const setStatus = (t) => ($("status").textContent = t);
+    const show = (v) => { $("out").hidden = false; $("out").textContent = typeof v === "string" ? v : JSON.stringify(v, null, 2); };
+
+    function refresh() {
+      const key = localStorage.getItem("tollgateKey");
+      $("models").disabled = !key;
+      if (key) setStatus(`Connected. Key ${key.slice(0, 10)}… is stored in this page's localStorage.`);
+    }
+
+    $("connect").onclick = async () => {
+      $("connect").disabled = true;
+      try {
+        const key = await requestTollgateAccess({
+          name: params.get("name") || "Example Web App",
+          baseURL,
+          onPending: () => setStatus("Waiting for you to click Allow in CLI Tollgate…"),
+        });
+        localStorage.setItem("tollgateKey", key);
+        refresh();
+      } catch (e) {
+        setStatus(e.message === "Failed to fetch" ? "CLI Tollgate is not running on this computer." : e.message);
+      } finally {
+        $("connect").disabled = false;
+      }
+    };
+
+    $("models").onclick = async () => {
+      const res = await fetch(`${baseURL}/v1/models`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("tollgateKey")}` },
+      });
+      if (res.status === 401) {
+        localStorage.removeItem("tollgateKey");
+        setStatus("The key was revoked. Connect again.");
+        refresh();
+        return;
+      }
+      show(await res.json());
+    };
+
+    $("forget").onclick = () => { localStorage.removeItem("tollgateKey"); setStatus("Not connected."); refresh(); };
+    refresh();
+  </script>
+</body>
+</html>

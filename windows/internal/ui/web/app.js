@@ -19,6 +19,7 @@ const ICONS = {
   close: '<path d="M4.4 4.4a.75.75 0 0 1 1.06 0L10 8.94l4.54-4.54a.75.75 0 1 1 1.06 1.06L11.06 10l4.54 4.54a.75.75 0 1 1-1.06 1.06L10 11.06 5.46 15.6a.75.75 0 0 1-1.06-1.06L8.94 10 4.4 5.46a.75.75 0 0 1 0-1.06Z"/>',
   arrow: '<path d="M11.3 4.2a.75.75 0 0 1 1.06 0l5.25 5.27a.75.75 0 0 1 0 1.06l-5.25 5.27a.75.75 0 1 1-1.06-1.06l3.97-3.99H2.75a.75.75 0 0 1 0-1.5h12.52L11.3 5.26a.75.75 0 0 1 0-1.06Z"/>',
   chart: '<path d="M10 2.75a.75.75 0 0 1 .75.75v13a.75.75 0 0 1-1.5 0v-13A.75.75 0 0 1 10 2.75Zm5 5a.75.75 0 0 1 .75.75v8a.75.75 0 0 1-1.5 0v-8a.75.75 0 0 1 .75-.75Zm-10 3a.75.75 0 0 1 .75.75v5a.75.75 0 0 1-1.5 0v-5A.75.75 0 0 1 5 10.75Z"/>',
+  key: '<path d="M12.5 2a5.5 5.5 0 1 1-1.67 10.74l-1.05 1.04a.75.75 0 0 1-.53.22H8v1.25a.75.75 0 0 1-.75.75H6v1.25a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1-.75-.75v-2.5c0-.2.08-.39.22-.53l5.04-5.04A5.5 5.5 0 0 1 12.5 2Zm0 1.5a4 4 0 0 0-3.8 5.24.75.75 0 0 1-.18.77L3.5 14.56v1.44h1v-1.25c0-.41.34-.75.75-.75H6.5v-1.25c0-.41.34-.75.75-.75h1.69l1.23-1.23a.75.75 0 0 1 .77-.18A4 4 0 1 0 12.5 3.5Zm1 2a1 1 0 1 1 0 2 1 1 0 0 1 0-2Z"/>',
   stack: '<path d="M9.67 2.08a.75.75 0 0 1 .66 0l7.25 3.5a.75.75 0 0 1 0 1.35l-7.25 3.5a.75.75 0 0 1-.66 0l-7.25-3.5a.75.75 0 0 1 0-1.35l7.25-3.5ZM4.47 6.25 10 8.92l5.53-2.67L10 3.58 4.47 6.25Zm-2.4 3.9a.75.75 0 0 1 1-.35L10 13.17l6.93-3.37a.75.75 0 1 1 .66 1.35l-7.26 3.5a.75.75 0 0 1-.66 0l-7.25-3.5a.75.75 0 0 1-.35-1Z"/>',
 };
 const icon = (name) => `<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">${ICONS[name]}</svg>`;
@@ -165,6 +166,78 @@ function render() {
   setRegion($("#view-overview"), overviewHTML());
   setRegion($("#view-models"), modelsHTML());
   setRegion($("#view-settings"), settingsHTML());
+  renderAccess();
+}
+
+// ---- Access requests ------------------------------------------------------
+
+function formatDate(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? "" : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+// What to say about where a request comes from; warn marks the risky cases.
+function originNote(origin) {
+  if (origin === "local program") return { text: "A program on this computer, not a web page.", warn: true };
+  if (/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(origin)) return { text: "A page served from this computer.", warn: false };
+  if (origin.startsWith("http://")) return { text: "Not a secure (https) site.", warn: true };
+  return null;
+}
+
+// A pending request takes over the window until it is answered.
+function renderAccess() {
+  const el = $("#access");
+  const reqs = state.accessRequests || [];
+  const req = reqs[0];
+  if (!req) {
+    if (!el.hidden) {
+      el.hidden = true;
+      el.innerHTML = "";
+      lastHTML.access = "";
+    }
+    return;
+  }
+  const note = originNote(req.origin);
+  const more = reqs.length > 1 ? `<p class="caption">${reqs.length - 1} more request${reqs.length > 2 ? "s" : ""} waiting.</p>` : "";
+  const html = `<div class="dialog access-dialog" role="alertdialog" aria-modal="true" aria-labelledby="access-title">
+      <div class="body">
+        <div class="access-icon">${icon("key")}</div>
+        <h2 id="access-title">Allow “${esc(req.name)}” to use your subscriptions?</h2>
+        <div class="origin mono" title="${esc(req.origin)}">${esc(req.origin)}</div>
+        ${note ? `<p class="caption ${note.warn ? "warn" : ""}">${esc(note.text)}</p>` : ""}
+        <p>It will be able to send requests through your signed-in ChatGPT and Claude accounts. You can revoke access anytime in Settings.</p>
+        ${more}
+      </div>
+      <div class="actions">
+        <button class="btn accent" data-click="allowAccess" data-id="${esc(req.id)}" data-name="${esc(req.name)}">Allow</button>
+        <button class="btn" data-click="denyAccess" data-id="${esc(req.id)}">Deny</button>
+      </div>
+    </div>`;
+  if (lastHTML.access === html) return;
+  lastHTML.access = html;
+  el.innerHTML = html;
+  el.hidden = false;
+  // Deny has focus so a stray Enter never grants access.
+  el.querySelector("[data-click='denyAccess']").focus();
+}
+
+function grantsHTML() {
+  const grants = state.grants || [];
+  const rows = grants.length
+    ? grants
+        .map(
+          (g) => `<div class="row">
+        <div class="tile">${icon("key")}</div>
+        <div class="grow">
+          <div class="label truncate" title="${esc(g.name)}">${esc(g.name)}</div>
+          <div class="caption truncate" title="${esc(g.origin)}">${esc(g.origin)} · allowed ${esc(formatDate(g.granted_at))} · <span class="mono">${esc(g.key_hint)}</span></div>
+        </div>
+        <button class="btn danger" data-click="revokeGrant" data-id="${esc(g.id)}" data-name="${esc(g.name)}" ${running() ? "" : "disabled"}>Revoke</button>
+      </div>`,
+        )
+        .join("")
+    : `<div class="row"><div class="grow caption">No apps yet. When a web app asks for access, CLI Tollgate asks you first.</div></div>`;
+  return `<h2 class="section-title">Connected apps</h2><div class="card">${rows}</div>`;
 }
 
 function renderHeader() {
@@ -376,6 +449,9 @@ function settingsHTML() {
     </div>
     <p class="footnote">Web pages can call the proxy (CORS is open), but every request needs the API key.</p>
 
+    ${grantsHTML()}
+    <p class="footnote">Revoking an app turns off its key right away. Regenerating your API key leaves connected apps working.</p>
+
     <h2 class="section-title">Advanced: Cloaking</h2>
     <div class="card">
       <div class="row"><div class="grow label">Disguise Claude requests as Claude Code</div>${toggle("c1", state.cloaking.claude, "setClaudeCloaking", {
@@ -509,10 +585,27 @@ const clicks = {
       toast(`Restarting on port ${port}…`);
     }
   },
+  async allowAccess(el) {
+    el.closest(".actions").querySelectorAll("button").forEach((b) => (b.disabled = true));
+    if (await call("allowAccess", { id: el.dataset.id })) toast(`Allowed ${el.dataset.name}`);
+  },
+  async denyAccess(el) {
+    el.closest(".actions").querySelectorAll("button").forEach((b) => (b.disabled = true));
+    await call("denyAccess", { id: el.dataset.id });
+  },
+  async revokeGrant(el) {
+    const ok = await confirmDialog({
+      title: `Revoke access for “${el.dataset.name}”?`,
+      message: "Its key stops working right away. It can ask for access again later.",
+      confirm: "Revoke",
+      danger: true,
+    });
+    if (ok && (await call("revokeGrant", { id: el.dataset.id }))) toast("Access revoked");
+  },
   async regenerate() {
     const ok = await confirmDialog({
       title: "Regenerate the API key?",
-      message: "Clients using the current key will stop working until you update them.",
+      message: "Clients using the current key will stop working until you update them. Connected apps keep their own keys.",
       confirm: "Regenerate",
       danger: true,
     });

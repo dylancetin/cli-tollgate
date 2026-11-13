@@ -6,6 +6,7 @@ struct SettingsView: View {
     @EnvironmentObject private var updater: Updater
     @State private var portDraft = ""
     @State private var confirmRegenerate = false
+    @State private var grantToRevoke: AccessGrant?
 
     var body: some View {
         Form {
@@ -40,6 +41,36 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Section {
+                if model.grants.isEmpty {
+                    Text("No apps yet. When a web app asks for access, CLI Tollgate asks you first.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(model.grants) { grant in
+                    HStack {
+                        Image(systemName: "key")
+                            .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(grant.name).lineLimit(1)
+                            Text(grantCaption(grant))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        Spacer()
+                        Button("Revoke…") { grantToRevoke = grant }
+                    }
+                }
+            } header: {
+                Text("Connected apps")
+            } footer: {
+                Text("Revoking an app turns off its key right away. Regenerating your API key leaves connected apps working.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .disabled(model.engineState != .running)
 
             Section {
                 Toggle("Disguise Claude requests as Claude Code", isOn: Binding(
@@ -80,7 +111,10 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 440)
         .fixedSize(horizontal: false, vertical: true)
-        .onAppear { portDraft = String(model.port) }
+        .onAppear {
+            portDraft = String(model.port)
+            Task { await model.refreshGrants() }
+        }
         .onChange(of: model.port) { portDraft = String($0) }
         .confirmationDialog("Regenerate the API key?", isPresented: $confirmRegenerate) {
             Button("Regenerate", role: .destructive) {
@@ -89,8 +123,28 @@ struct SettingsView: View {
                 }
             }
         } message: {
-            Text("Clients using the current key will stop working until you update them.")
+            Text("Clients using the current key will stop working until you update them. Connected apps keep their own keys.")
         }
+        .confirmationDialog(
+            "Revoke access for “\(grantToRevoke?.name ?? "")”?",
+            isPresented: Binding(get: { grantToRevoke != nil }, set: { if !$0 { grantToRevoke = nil } }),
+            presenting: grantToRevoke
+        ) { grant in
+            Button("Revoke", role: .destructive) {
+                Task { await model.revokeGrant(grant) }
+            }
+        } message: { _ in
+            Text("Its key stops working right away. It can ask for access again later.")
+        }
+    }
+
+    private func grantCaption(_ grant: AccessGrant) -> String {
+        var parts = [grant.origin]
+        if let date = grant.grantedDate {
+            parts.append("allowed " + date.formatted(date: .abbreviated, time: .omitted))
+        }
+        parts.append(grant.keyHint)
+        return parts.joined(separator: " · ")
     }
 
     private func applyPort() {

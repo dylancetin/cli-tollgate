@@ -60,8 +60,11 @@ final class AppModel: ObservableObject {
     @Published private(set) var usageToday: UsageSummary.Point?
     @Published private(set) var launchAtLogin = SMAppService.mainApp.status == .enabled
 
+    @Published private(set) var grants: [AccessGrant] = []
+
     private var loginState: String?
     private var refreshTimer: Timer?
+    private var accessWatcher: Task<Void, Never>?
 
     private var client: ManagementClient { engine.client }
 
@@ -87,6 +90,9 @@ final class AppModel: ObservableObject {
 
     func start() {
         engine.start()
+        if accessWatcher == nil {
+            accessWatcher = Task { await self.watchAccessRequests() }
+        }
         refreshTimer?.invalidate()
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             Task { @MainActor in
@@ -110,6 +116,7 @@ final class AppModel: ObservableObject {
         await refreshSettings()
         await refreshModels()
         await refreshUsage()
+        await refreshGrants()
     }
 
     func refreshAccounts() async {
@@ -318,9 +325,12 @@ final class AppModel: ObservableObject {
 
     // MARK: - Settings
 
+    /// Replaces the app's own key (the first one). Keys handed to apps through
+    /// access requests stay valid.
     func regenerateAPIKey() async throws {
         let key = EngineConfig.generateAPIKey()
-        try await client.put("/v8/management/config/access/api-keys", [key])
+        let keys: [String] = try await client.getOptional("/v8/management/config/access/api-keys") ?? []
+        try await client.put("/v8/management/config/access/api-keys", [key] + Array(keys.dropFirst()))
         apiKey = key
     }
 
@@ -341,6 +351,87 @@ final class AppModel: ObservableObject {
             report(error)
         }
         launchAtLogin = SMAppService.mainApp.status == .enabled
+    }
+
+    // MARK: - Access requests
+    //
+    // A web app generates its own key and calls the engine's POST /access/requests.
+    // We long-poll the pending list (which is also what lets the engine accept
+    // requests at all), ask the user, and approve or deny through the management API.
+
+    private func watchAccessRequests() async {
+        while !Task.isCancelled {
+            guard engineState == .running else {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                continue
+            }
+            do {
+                let list: AccessRequestList = try await client.longGet(
+                    "/v8/management/access/requests", query: ["wait": "50"]
+                )
+                for request in list.requests {
+                    await prompt(for: request)
+                }
+            } catch APIError.status(404, _) {
+                try? await Task.sleep(nanoseconds: 60_000_000_000) // engine without access requests
+            } catch {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+            }
+        }
+    }
+
+    private func prompt(for request: AccessRequest) async {
+        let alert = NSAlert()
+        alert.messageText = "Allow “\(request.name)” to use your subscriptions?"
+        var info = request.origin
+        if let note = request.originNote {
+            info += "\n" + (note.warn ? "⚠︎ " : "") + note.text
+        }
+        info += "\n\nIt will be able to send requests through your signed-in ChatGPT and Claude accounts. "
+            + "You can revoke access anytime in Settings."
+        alert.informativeText = info
+        alert.alertStyle = request.originNote?.warn == true ? .warning : .informational
+        // Deny is the default button so a stray Return never grants access.
+        let deny = alert.addButton(withTitle: "Deny")
+        deny.keyEquivalent = "\r"
+        let allow = alert.addButton(withTitle: "Allow")
+        allow.keyEquivalent = ""
+        alert.window.level = .floating
+        NSApp.activate(ignoringOtherApps: true)
+        let allowed = alert.runModal() == .alertSecondButtonReturn
+
+        let verb = allowed ? "approve" : "deny"
+        do {
+            try await client.post("/v8/management/access/requests/\(request.id)/\(verb)")
+            if allowed { await refreshGrants() }
+        } catch APIError.status(404, _) {
+            lastError = "The request from \(request.name) expired before it was answered."
+        } catch {
+            report(error)
+        }
+    }
+
+    func refreshGrants() async {
+        guard engineState == .running else { return }
+        do {
+            let list: AccessGrantList = try await client.get("/v8/management/access/grants")
+            grants = list.grants
+        } catch APIError.status(404, _) {
+            grants = []
+        } catch {
+            report(error)
+        }
+    }
+
+    func revokeGrant(_ grant: AccessGrant) async {
+        do {
+            try await client.delete("/v8/management/access/grants/\(grant.id)")
+        } catch APIError.status(404, _) {
+            // Already gone.
+        } catch {
+            report(error)
+        }
+        await refreshGrants()
     }
 
     // MARK: - Helpers

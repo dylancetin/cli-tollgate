@@ -25,6 +25,12 @@ var managementHTTP = &http.Client{
 	Transport: &http.Transport{Proxy: nil, MaxIdleConnsPerHost: 4, IdleConnTimeout: 30 * time.Second},
 }
 
+// Long polls (access requests) wait up to a minute, so they get their own
+// client without the 15s timeout; the request context bounds them instead.
+var longPollHTTP = &http.Client{
+	Transport: &http.Transport{Proxy: nil, MaxIdleConnsPerHost: 2, IdleConnTimeout: 90 * time.Second},
+}
+
 // APIError is a non-2xx answer from the engine.
 type APIError struct {
 	Status  int
@@ -58,6 +64,27 @@ func (m Management) GetOptional(ctx context.Context, path string, out any) (bool
 	return err == nil, err
 }
 
+// LongGet is Get for endpoints that hold the request open (?wait=).
+func (m Management) LongGet(ctx context.Context, path string, query url.Values, out any) error {
+	data, err := m.sendWith(ctx, longPollHTTP, http.MethodGet, path, query, nil)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(data, out); err != nil {
+		return fmt.Errorf("unexpected response from %s: %w", path, err)
+	}
+	return nil
+}
+
+// Post sends a body-less POST and decodes the answer into out (if non-nil).
+func (m Management) Post(ctx context.Context, path string, out any) error {
+	data, err := m.send(ctx, http.MethodPost, path, nil, nil)
+	if err != nil || out == nil {
+		return err
+	}
+	return json.Unmarshal(data, out)
+}
+
 func (m Management) Put(ctx context.Context, path string, body any) error {
 	data, err := json.Marshal(body)
 	if err != nil {
@@ -78,6 +105,10 @@ func (m Management) Healthy(ctx context.Context) bool {
 }
 
 func (m Management) send(ctx context.Context, method, path string, query url.Values, body []byte) ([]byte, error) {
+	return m.sendWith(ctx, managementHTTP, method, path, query, body)
+}
+
+func (m Management) sendWith(ctx context.Context, client *http.Client, method, path string, query url.Values, body []byte) ([]byte, error) {
 	u := fmt.Sprintf("http://127.0.0.1:%d%s", m.Port, path)
 	if len(query) > 0 {
 		u += "?" + query.Encode()
@@ -94,7 +125,7 @@ func (m Management) send(ctx context.Context, method, path string, query url.Val
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	resp, err := managementHTTP.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}

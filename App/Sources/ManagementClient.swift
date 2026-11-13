@@ -14,6 +14,14 @@ struct ManagementClient {
         return URLSession(configuration: config)
     }()
 
+    /// Long polls (access requests) hold the request open for up to ~55s.
+    private static let longPollSession: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 70
+        config.connectionProxyDictionary = [:]
+        return URLSession(configuration: config)
+    }()
+
     // MARK: - Generic requests
 
     func get<T: Decodable>(_ path: String, query: [String: String] = [:], as type: T.Type = T.self) async throws -> T {
@@ -23,6 +31,20 @@ struct ManagementClient {
         } catch {
             throw APIError.decoding(path, error)
         }
+    }
+
+    /// GET for endpoints that wait (`?wait=`) before answering.
+    func longGet<T: Decodable>(_ path: String, query: [String: String] = [:], as type: T.Type = T.self) async throws -> T {
+        let data = try await send("GET", path, query: query, session: Self.longPollSession)
+        do {
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            throw APIError.decoding(path, error)
+        }
+    }
+
+    func post(_ path: String) async throws {
+        _ = try await send("POST", path)
     }
 
     func put<Body: Encodable>(_ path: String, _ body: Body) async throws {
@@ -46,7 +68,8 @@ struct ManagementClient {
         (try? await send("GET", "/v8/management/config/server")) != nil
     }
 
-    private func send(_ method: String, _ path: String, query: [String: String] = [:], body: Data? = nil) async throws -> Data {
+    private func send(_ method: String, _ path: String, query: [String: String] = [:], body: Data? = nil,
+                      session: URLSession = ManagementClient.session) async throws -> Data {
         var components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
         if !query.isEmpty {
             components.queryItems = query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
@@ -58,7 +81,7 @@ struct ManagementClient {
             request.httpBody = body
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
-        let (data, response) = try await Self.session.data(for: request)
+        let (data, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             let message = (try? JSONDecoder().decode(ErrorBody.self, from: data))?.text
@@ -198,4 +221,59 @@ struct UsageSummary: Decodable {
     struct Tokens: Decodable {
         let total: Int
     }
+}
+
+// MARK: - Access requests
+
+/// A local app or web page asking for an API key (engine: POST /access/requests).
+struct AccessRequest: Decodable, Identifiable, Equatable {
+    let id: String
+    let name: String
+    let origin: String
+    let createdAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, origin
+        case createdAt = "created_at"
+    }
+
+    /// What to tell the user about the origin; `warn` marks the risky cases.
+    var originNote: (text: String, warn: Bool)? {
+        if origin == "local program" { return ("A program on this computer, not a web page.", true) }
+        let local = ["http://localhost", "http://127.0.0.1", "http://[::1]"]
+        if local.contains(where: { origin == $0 || origin.hasPrefix($0 + ":") }) {
+            return ("A page served from this computer.", false)
+        }
+        if origin.hasPrefix("http://") { return ("Not a secure (https) site.", true) }
+        return nil
+    }
+}
+
+struct AccessRequestList: Decodable {
+    let requests: [AccessRequest]
+}
+
+/// An app that was allowed in. Its key lives in access.api-keys.
+struct AccessGrant: Decodable, Identifiable, Equatable {
+    let id: String
+    let name: String
+    let origin: String
+    let keyHint: String
+    let grantedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, origin
+        case keyHint = "key_hint"
+        case grantedAt = "granted_at"
+    }
+
+    var grantedDate: Date? {
+        let withFraction = ISO8601DateFormatter()
+        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return withFraction.date(from: grantedAt) ?? ISO8601DateFormatter().date(from: grantedAt)
+    }
+}
+
+struct AccessGrantList: Decodable {
+    let grants: [AccessGrant]
 }

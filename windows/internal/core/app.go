@@ -72,6 +72,9 @@ type App struct {
 	codexOn    bool
 	usage      *Usage
 
+	accessRequests []AccessRequest
+	grants         []AccessGrant
+
 	changeMu  sync.Mutex
 	changed   chan struct{}
 	revision  uint64
@@ -110,6 +113,7 @@ func NewApp(p Paths, platform Platform, version string, build int) *App {
 func (a *App) Start() {
 	_ = os.RemoveAll(a.Paths.Updates()) // installers from a previous run are stale
 	a.Engine.Start()
+	go a.watchAccessRequests()
 	go func() {
 		t := time.NewTicker(60 * time.Second)
 		defer t.Stop()
@@ -221,15 +225,17 @@ type State struct {
 		ClaudeModelList bool `json:"claudeModelList"`
 		Codex           bool `json:"codex"`
 	} `json:"cloaking"`
-	Usage         *Usage       `json:"usage,omitempty"`
-	LaunchAtLogin bool         `json:"launchAtLogin"`
-	Settings      Settings     `json:"settings"`
-	Update        UpdateStatus `json:"update"`
-	Snippets      []Snippet    `json:"snippets"`
-	Version       string       `json:"version"`
-	Build         int          `json:"build"`
-	EngineCommit  string       `json:"engineCommit"`
-	DataDir       string       `json:"dataDir"`
+	Usage          *Usage          `json:"usage,omitempty"`
+	AccessRequests []AccessRequest `json:"accessRequests"`
+	Grants         []AccessGrant   `json:"grants"`
+	LaunchAtLogin  bool            `json:"launchAtLogin"`
+	Settings       Settings        `json:"settings"`
+	Update         UpdateStatus    `json:"update"`
+	Snippets       []Snippet       `json:"snippets"`
+	Version        string          `json:"version"`
+	Build          int             `json:"build"`
+	EngineCommit   string          `json:"engineCommit"`
+	DataDir        string          `json:"dataDir"`
 }
 
 func (a *App) Snapshot() State {
@@ -241,21 +247,23 @@ func (a *App) Snapshot() State {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	s := State{
-		Revision:      rev,
-		Engine:        string(engineState),
-		EngineMessage: engineMsg,
-		Port:          port,
-		BaseURL:       fmt.Sprintf("http://127.0.0.1:%d", port),
-		APIKey:        a.apiKey,
-		LoginActive:   a.loginOf != "",
-		LastError:     a.lastError,
-		Models:        map[string][]ModelView{},
-		Usage:         a.usage,
-		Settings:      a.settings.Get(),
-		Version:       a.Version,
-		Build:         a.Build,
-		EngineCommit:  a.engineCommit,
-		DataDir:       a.Paths.Data,
+		Revision:       rev,
+		Engine:         string(engineState),
+		EngineMessage:  engineMsg,
+		Port:           port,
+		BaseURL:        fmt.Sprintf("http://127.0.0.1:%d", port),
+		APIKey:         a.apiKey,
+		LoginActive:    a.loginOf != "",
+		LastError:      a.lastError,
+		Models:         map[string][]ModelView{},
+		Usage:          a.usage,
+		AccessRequests: append([]AccessRequest{}, a.accessRequests...),
+		Grants:         append([]AccessGrant{}, a.grants...),
+		Settings:       a.settings.Get(),
+		Version:        a.Version,
+		Build:          a.Build,
+		EngineCommit:   a.engineCommit,
+		DataDir:        a.Paths.Data,
 	}
 	s.Cloaking.Claude, s.Cloaking.ClaudeModelList, s.Cloaking.Codex = a.claudeOn, a.claudeList, a.codexOn
 	for _, p := range Providers {
@@ -314,6 +322,7 @@ func (a *App) RefreshAll() {
 	a.RefreshSettings()
 	a.RefreshModels()
 	a.RefreshUsage()
+	a.RefreshGrants()
 }
 
 func (a *App) RefreshAccounts() {
@@ -726,11 +735,21 @@ func (a *App) SetCodexCloaking(on bool) {
 
 // ---- Settings ---------------------------------------------------------------
 
+// RegenerateAPIKey replaces the app's own key (the first one). Keys that were
+// given to apps through access requests stay valid.
 func (a *App) RegenerateAPIKey() error {
 	key := GenerateAPIKey()
 	ctx, cancel := ctx15()
 	defer cancel()
-	if err := a.client().Put(ctx, "/v8/management/config/access/api-keys", []string{key}); err != nil {
+	var keys []string
+	if _, err := a.client().GetOptional(ctx, "/v8/management/config/access/api-keys", &keys); err != nil {
+		return err
+	}
+	next := []string{key}
+	if len(keys) > 1 {
+		next = append(next, keys[1:]...)
+	}
+	if err := a.client().Put(ctx, "/v8/management/config/access/api-keys", next); err != nil {
 		return err
 	}
 	a.mu.Lock()

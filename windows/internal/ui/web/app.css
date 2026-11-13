@@ -463,3 +463,29 @@ pre.code {
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--stroke-strong); border-radius: 5px; border: 3px solid transparent; background-clip: padding-box; }
+
+/* Access request prompt: above everything, including confirm dialogs. */
+#access { z-index: 30; }
+.access-dialog { max-width: 400px; }
+.access-dialog .body > * + * { margin-top: 10px; }
+.access-dialog h2 { overflow-wrap: anywhere; }
+.access-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--card-2);
+  color: var(--accent);
+}
+.access-icon svg { width: 22px; height: 22px; }
+.access-dialog .origin {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--stroke);
+  background: var(--card-2);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

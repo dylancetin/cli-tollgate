@@ -165,6 +165,7 @@ type actionBody struct {
 	Port     int    `json:"port"`
 	Text     string `json:"text"`
 	Tab      string `json:"tab"`
+	ID       string `json:"id"`
 }
 
 func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
@@ -236,6 +237,12 @@ func (s *Server) dispatch(action string, b actionBody) error {
 		a.SetClaudeCloakModelList(b.On)
 	case "setCodexCloaking":
 		a.SetCodexCloaking(b.On)
+	case "allowAccess":
+		return a.AnswerAccessRequest(b.ID, true)
+	case "denyAccess":
+		return a.AnswerAccessRequest(b.ID, false)
+	case "revokeGrant":
+		return a.RevokeGrant(b.ID)
 	case "regenerateAPIKey":
 		return a.RegenerateAPIKey()
 	case "setPort":

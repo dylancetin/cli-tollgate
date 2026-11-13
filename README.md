@@ -33,6 +33,28 @@ and your config never leave your computer.
 - **Auto-update** via [Sparkle](https://sparkle-project.org). The feed is the `appcast.xml` attached to
   the latest GitHub release, so no website is needed.
 
+## Letting a web app use your subscriptions
+
+A web app doesn't need the user to copy and paste a key. It can ask for one:
+
+1. The page generates a random key (32+ characters of `A-Z a-z 0-9 - _ .`) and sends
+   `POST http://127.0.0.1:8317/access/requests` with `{"name": "My App", "key": "<key>"}`.
+   The response is `202 {"id": "…", "status": "pending"}`.
+2. CLI Tollgate shows **Allow “My App” to use your subscriptions?** with the page's origin.
+   Deny is the default button.
+3. The page polls `GET /access/requests/<id>?wait=50` (each call waits up to 55 s) until the status is
+   `approved`, `denied` or `expired`. Once it's approved, the page uses its key as a normal API key.
+
+Allowed apps are listed under **Settings → Connected apps**, where you can revoke them. Revoking an app
+turns its key off right away. Regenerating your own API key doesn't affect connected apps.
+A ready-to-copy `requestTollgateAccess()` helper and a demo page are in
+[`examples/web-app/index.html`](examples/web-app/index.html).
+
+Safeguards: requests are only accepted from this computer, and only while the app is running to answer
+them. There is one pending request per origin, and an origin has to wait 30 s after a denial before it
+can ask again. Requests expire after 5 minutes. The key never comes back from the server, and
+`access-grants.json` keeps only key hashes.
+
 ## Install
 
 1. Download `CLI-Tollgate-<version>.dmg` from [Releases](../../releases) and drag the app to Applications.
