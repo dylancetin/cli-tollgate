@@ -1,0 +1,15 @@
+# Build outputs
+/build/
+/dist/
+DerivedData/
+*.xcodeproj/
+*.xcworkspace/
+.swiftpm/
+.DS_Store
+
+# Never commit signing keys
+*.pem
+*.p12
+
+# Windows build intermediates
+/windows/rsrc_windows_*.syso

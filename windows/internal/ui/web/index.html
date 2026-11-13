@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>CLI Tollgate</title>
+  <link rel="icon" href="favicon.png">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="titlebar">
+    <img class="app-icon" src="icon.png" alt="" width="36" height="36">
+    <div class="title-text">
+      <h1>CLI Tollgate</h1>
+      <div class="status" id="status"><span class="dot"></span><span class="status-text">Connecting…</span></div>
+    </div>
+    <label class="switch" title="Start or stop the local proxy">
+      <input type="checkbox" id="engine-toggle" data-change="setEngine" aria-label="Proxy running">
+      <span class="track"><span class="knob"></span></span>
+    </label>
+  </header>
+
+  <nav class="pivot" role="tablist">
+    <a href="#overview" role="tab" data-tab="overview">Overview</a>
+    <a href="#models" role="tab" data-tab="models">Models</a>
+    <a href="#settings" role="tab" data-tab="settings">Settings</a>
+  </nav>
+
+  <main>
+    <div id="banners"></div>
+    <section class="view" id="view-overview"></section>
+    <section class="view" id="view-models"></section>
+    <section class="view" id="view-settings"></section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="modal-backdrop" id="modal" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,234 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # build number = commit count
+          submodules: recursive # engine/ = the CLIProxyAPI fork
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: engine/go.mod
+          cache-dependency-path: engine/go.sum
+
+      - name: Versions
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="0.0.0-dev"
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "BUILD=$(git rev-list --count HEAD)" >> "$GITHUB_ENV"
+
+      - name: Build engine (universal)
+        run: ENGINE_VERSION="tollgate-$VERSION" scripts/build-engine.sh
+
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build app
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project CLITollgate.xcodeproj \
+            -scheme CLITollgate \
+            -configuration Release \
+            -derivedDataPath build/dd \
+            -destination 'generic/platform=macOS' \
+            ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
+            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" \
+            CODE_SIGN_IDENTITY=- \
+            build | tee build/xcodebuild.log | grep -E 'error:|warning:|BUILD (SUCCEEDED|FAILED)' || true
+          test -d "build/dd/Build/Products/Release/CLI Tollgate.app"
+
+      - name: Smoke test bundled engine
+        run: |
+          APP="build/dd/Build/Products/Release/CLI Tollgate.app"
+          test -x "$APP/Contents/MacOS/tollgate-engine"
+          lipo -info "$APP/Contents/MacOS/tollgate-engine"
+          plutil -p "$APP/Contents/Info.plist" | grep -E 'SUFeedURL|SUPublicEDKey|CFBundleVersion|CFBundleShortVersionString'
+
+      - name: Package
+        run: scripts/package.sh "build/dd/Build/Products/Release/CLI Tollgate.app" "$VERSION"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CLI-Tollgate-${{ env.VERSION }}-macos
+          path: dist/*
+
+  windows:
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: engine/go.mod
+          cache-dependency-path: |
+            engine/go.sum
+            windows/go.sum
+
+      - name: Versions
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="0.0.0-dev"
+          fi
+          BUILD="$(git rev-list --count HEAD)"
+          NUMERIC="$(echo "$VERSION" | sed -E 's/^([0-9]+)\.([0-9]+)\.([0-9]+).*/\1.\2.\3/')"
+          [[ "$NUMERIC" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || NUMERIC="0.0.0"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "BUILD=$BUILD" >> "$GITHUB_ENV"
+          echo "NUMERIC_VERSION=$NUMERIC.$BUILD" >> "$GITHUB_ENV"
+
+      - name: Vet and test
+        working-directory: windows
+        run: |
+          go vet ./...
+          go test ./...
+
+      - name: Build engine and app
+        run: ENGINE_VERSION="tollgate-$VERSION" scripts/build-windows.sh
+
+      - name: Smoke test app
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $data = Join-Path $env:RUNNER_TEMP "tollgate-data"
+          $env:TOLLGATE_DATA_DIR = $data
+          $app = Start-Process -FilePath "build\windows\CLI Tollgate.exe" -PassThru
+          $ok = $false
+          for ($i = 0; $i -lt 60 -and -not $ok; $i++) {
+            Start-Sleep -Milliseconds 500
+            try { Invoke-WebRequest http://127.0.0.1:8317/v1/models -UseBasicParsing | Out-Null }
+            catch { if ($_.Exception.Response.StatusCode.value__ -eq 401) { $ok = $true } }
+          }
+          Get-Content "$data\logs\app.log" -ErrorAction SilentlyContinue
+          if (-not $ok) { Get-Content "$data\logs\engine.log" -Tail 30 -ErrorAction SilentlyContinue; throw "engine did not answer on 8317" }
+          Write-Host "engine is up and requires the API key"
+
+          # A second launch must not start a second app or engine.
+          Start-Process -FilePath "build\windows\CLI Tollgate.exe" -Wait
+          $count = @(Get-Process tollgate-engine -ErrorAction SilentlyContinue).Count
+          if ($count -ne 1) { throw "expected 1 engine, found $count" }
+
+          # Screenshot of the window (WebView2) for the build artifacts.
+          Start-Sleep -Seconds 4
+          New-Item -ItemType Directory -Force -Path screenshots | Out-Null
+          try {
+            Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $bmp.Save("screenshots\windows-app.png")
+          } catch { Write-Warning "screenshot failed: $_" }
+
+          # Killing the app must take the engine with it (job object).
+          Stop-Process -Id $app.Id -Force
+          Start-Sleep -Seconds 2
+          if (Get-Process tollgate-engine -ErrorAction SilentlyContinue) { throw "engine outlived the app" }
+          Write-Host "engine stopped with the app"
+
+      - name: Upload screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-screenshot
+          path: screenshots/*
+          if-no-files-found: ignore
+
+      - name: Build installer and portable zip
+        run: |
+          ISCC="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
+          if [ ! -f "$ISCC" ]; then choco install innosetup -y --no-progress; fi
+          mkdir -p dist
+          "$ISCC" //Q "//DAppVersion=$VERSION" "//DAppBuild=$BUILD" "//DNumericVersion=$NUMERIC_VERSION" \
+            "//DSourceDir=$(cygpath -w "$PWD/build/windows")" "//DOutputDir=$(cygpath -w "$PWD/dist")" \
+            windows/installer/CLITollgate.iss
+          (cd build/windows && 7z a -tzip "../../dist/CLI-Tollgate-$VERSION-windows-x64.zip" . >/dev/null)
+          ls -la dist
+
+      - name: Smoke test installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $setup = Get-Item "dist\CLI-Tollgate-Setup-$env:VERSION.exe"
+          Start-Process $setup.FullName -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/SP-" -Wait
+          $dir = Join-Path $env:LOCALAPPDATA "Programs\CLI Tollgate"
+          foreach ($f in "CLI Tollgate.exe","tollgate-engine.exe","engine-commit.txt") {
+            if (-not (Test-Path (Join-Path $dir $f))) { throw "missing $f after install" }
+          }
+          Start-Process (Join-Path $dir "unins000.exe") -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES" -Wait
+          # The uninstaller re-launches itself from %TEMP%, so poll for completion.
+          for ($i = 0; $i -lt 40 -and (Test-Path (Join-Path $dir "CLI Tollgate.exe")); $i++) { Start-Sleep -Milliseconds 500 }
+          if (Test-Path (Join-Path $dir "CLI Tollgate.exe")) { throw "uninstall left the app behind" }
+          Write-Host "install and uninstall OK"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CLI-Tollgate-${{ env.VERSION }}-windows
+          path: dist/*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Versions
+        run: |
+          echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          echo "BUILD=$(git rev-list --count HEAD)" >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: CLI-Tollgate-*
+          path: dist
+          merge-multiple: true
+
+      - name: Sign updates and write feeds
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          test -n "$SPARKLE_PRIVATE_KEY" || { echo "SPARKLE_PRIVATE_KEY secret is not set"; exit 1; }
+          scripts/make-appcast.sh
+          scripts/make-windows-feed.sh
+          ls -la dist
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/*.zip dist/*.dmg dist/*.exe dist/appcast.xml dist/latest-windows.json \
+            --title "CLI Tollgate $VERSION" \
+            --generate-notes

@@ -1,4 +1,36 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#0d9488"/>
-  <text x="32" y="32" dy="0.35em" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="26" font-weight="600" fill="#ffffff">CP</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#14b8a6"/>
+      <stop offset="1" stop-color="#0f5f58"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.18"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="arm">
+      <rect x="0" y="-34" width="560" height="68" rx="34"/>
+    </clipPath>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#shine)"/>
+  <!-- road -->
+  <path d="M300 924 L470 560 L554 560 L724 924 Z" fill="#0b4743" opacity="0.55"/>
+  <path d="M506 610 L518 610 L530 690 L494 690 Z M488 740 L536 740 L552 860 L472 860 Z" fill="#ffffff" opacity="0.35"/>
+  <!-- barrier arm, raised -->
+  <g transform="translate(330 610) rotate(-32)">
+    <g clip-path="url(#arm)">
+      <rect x="0" y="-34" width="560" height="68" fill="#ffffff"/>
+      <g fill="#f97316">
+        <rect x="90" y="-40" width="56" height="80" transform="skewX(-30)"/>
+        <rect x="230" y="-40" width="56" height="80" transform="skewX(-30)"/>
+        <rect x="370" y="-40" width="56" height="80" transform="skewX(-30)"/>
+        <rect x="510" y="-40" width="56" height="80" transform="skewX(-30)"/>
+      </g>
+    </g>
+  </g>
+  <!-- post -->
+  <rect x="270" y="560" width="120" height="260" rx="22" fill="#ffffff"/>
+  <circle cx="330" cy="610" r="40" fill="#0f5f58"/>
+  <circle cx="330" cy="610" r="16" fill="#ffffff"/>
 </svg>
