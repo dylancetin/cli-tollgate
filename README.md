@@ -18,12 +18,12 @@ and your config never leave your computer.
   again replaces that provider's account. Shows the email, plan and rate-limit cooldowns.
 - **Model exposure**: show or hide each model per provider, and give any model an extra alias
   (for example `sonnet` → `claude-sonnet-4-5-…`). The original ID keeps working.
-- **Cloaking, on by default, chosen per model**: one switch in the menu. The disguise follows the
+- **Cloaking, on by default, chosen per model**: one switch in Settings → Advanced. The disguise follows the
   requested model, whatever the client is:
   - Claude models → disguised as **Claude Code** (real Claude Code requests pass through unchanged).
   - GPT / Codex models → sent with the official **Codex CLI** identity headers.
 
-  Settings → Advanced lets you turn each side off separately, and choose whether Claude model IDs
+  The same section lets you turn each side off separately, and choose whether Claude model IDs
   are cloaked in `/v1/models`.
 - **Web pages can call it**: binds to loopback only and CORS is open, so browser apps can use it.
   Every request still needs the API key.

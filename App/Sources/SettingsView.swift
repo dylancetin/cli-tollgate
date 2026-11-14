@@ -72,7 +72,26 @@ struct SettingsView: View {
             }
             .disabled(model.engineState != .running)
 
+            Section("Updates") {
+                Toggle("Check for updates automatically", isOn: $updater.automaticallyChecks)
+                Toggle("Download and install updates automatically", isOn: $updater.automaticallyDownloads)
+                    .disabled(!updater.automaticallyChecks)
+                Button("Check Now") { updater.checkForUpdates() }
+                    .disabled(!updater.canCheckForUpdates)
+            }
+
             Section {
+                Toggle(isOn: Binding(
+                    get: { model.cloakingEnabled },
+                    set: { on in Task { await model.setCloaking(on) } }
+                )) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Cloak requests")
+                        Text(cloakingCaption)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 Toggle("Disguise Claude requests as Claude Code", isOn: Binding(
                     get: { model.claudeCloaking },
                     set: { on in Task { await model.setClaudeCloaking(on) } }
@@ -94,14 +113,6 @@ struct SettingsView: View {
             }
             .disabled(model.engineState != .running)
 
-            Section("Updates") {
-                Toggle("Check for updates automatically", isOn: $updater.automaticallyChecks)
-                Toggle("Download and install updates automatically", isOn: $updater.automaticallyDownloads)
-                    .disabled(!updater.automaticallyChecks)
-                Button("Check Now") { updater.checkForUpdates() }
-                    .disabled(!updater.canCheckForUpdates)
-            }
-
             Section("About") {
                 LabeledContent("Version", value: appVersion)
                 LabeledContent("Engine", value: engineCommit)
@@ -109,8 +120,10 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 440)
-        .fixedSize(horizontal: false, vertical: true)
+        // The form scrolls inside a resizable window instead of growing to
+        // its full content height, which ran past the bottom of the screen.
+        .frame(width: 460)
+        .frame(minHeight: 320, idealHeight: 620, maxHeight: .infinity)
         .onAppear {
             portDraft = String(model.port)
             Task { await model.refreshGrants() }
@@ -135,6 +148,14 @@ struct SettingsView: View {
             }
         } message: { _ in
             Text("Its key stops working right away. It can ask for access again later.")
+        }
+    }
+
+    private var cloakingCaption: String {
+        switch (model.claudeCloaking, model.codexCloaking) {
+        case (true, true): return "Claude models go out as Claude Code, GPT / Codex as Codex CLI."
+        case (false, false): return "Requests keep the calling client's identity."
+        default: return "Partially on. Adjust each side below."
         }
     }
 

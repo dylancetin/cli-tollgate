@@ -309,11 +309,6 @@ pre.code {
   user-select: text;
 }
 
-.routes { padding: 0 14px 12px 14px; display: grid; gap: 4px; }
-.route { display: flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 12px; }
-.route svg { width: 12px; height: 12px; }
-.route b { font-weight: 600; color: var(--text); }
-.route .off { color: var(--text-3); }
 
 .usage { display: flex; align-items: center; gap: 6px; margin: 14px 4px 0; color: var(--text-2); font-size: 12px; }
 .usage svg { width: 14px; height: 14px; }

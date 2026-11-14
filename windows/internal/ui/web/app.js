@@ -17,7 +17,6 @@ const ICONS = {
   warn: '<path d="M8.68 2.79a1.5 1.5 0 0 1 2.64 0l6.5 11.99A1.5 1.5 0 0 1 16.5 17h-13a1.5 1.5 0 0 1-1.32-2.22l6.5-11.99ZM10 7a.75.75 0 0 0-.75.75v4a.75.75 0 0 0 1.5 0v-4A.75.75 0 0 0 10 7Zm0 7.5a.9.9 0 1 0 0-1.8.9.9 0 0 0 0 1.8Z"/>',
   info: '<path d="M10 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16Zm0 7a.75.75 0 0 0-.75.75v4a.75.75 0 0 0 1.5 0v-4A.75.75 0 0 0 10 9Zm0-3.25a.9.9 0 1 0 0 1.8.9.9 0 0 0 0-1.8Z"/>',
   close: '<path d="M4.4 4.4a.75.75 0 0 1 1.06 0L10 8.94l4.54-4.54a.75.75 0 1 1 1.06 1.06L11.06 10l4.54 4.54a.75.75 0 1 1-1.06 1.06L10 11.06 5.46 15.6a.75.75 0 0 1-1.06-1.06L8.94 10 4.4 5.46a.75.75 0 0 1 0-1.06Z"/>',
-  arrow: '<path d="M11.3 4.2a.75.75 0 0 1 1.06 0l5.25 5.27a.75.75 0 0 1 0 1.06l-5.25 5.27a.75.75 0 1 1-1.06-1.06l3.97-3.99H2.75a.75.75 0 0 1 0-1.5h12.52L11.3 5.26a.75.75 0 0 1 0-1.06Z"/>',
   chart: '<path d="M10 2.75a.75.75 0 0 1 .75.75v13a.75.75 0 0 1-1.5 0v-13A.75.75 0 0 1 10 2.75Zm5 5a.75.75 0 0 1 .75.75v8a.75.75 0 0 1-1.5 0v-8a.75.75 0 0 1 .75-.75Zm-10 3a.75.75 0 0 1 .75.75v5a.75.75 0 0 1-1.5 0v-5A.75.75 0 0 1 5 10.75Z"/>',
   key: '<path d="M12.5 2a5.5 5.5 0 1 1-1.67 10.74l-1.05 1.04a.75.75 0 0 1-.53.22H8v1.25a.75.75 0 0 1-.75.75H6v1.25a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1-.75-.75v-2.5c0-.2.08-.39.22-.53l5.04-5.04A5.5 5.5 0 0 1 12.5 2Zm0 1.5a4 4 0 0 0-3.8 5.24.75.75 0 0 1-.18.77L3.5 14.56v1.44h1v-1.25c0-.41.34-.75.75-.75H6.5v-1.25c0-.41.34-.75.75-.75h1.69l1.23-1.23a.75.75 0 0 1 .77-.18A4 4 0 1 0 12.5 3.5Zm1 2a1 1 0 1 1 0 2 1 1 0 0 1 0-2Z"/>',
   stack: '<path d="M9.67 2.08a.75.75 0 0 1 .66 0l7.25 3.5a.75.75 0 0 1 0 1.35l-7.25 3.5a.75.75 0 0 1-.66 0l-7.25-3.5a.75.75 0 0 1 0-1.35l7.25-3.5ZM4.47 6.25 10 8.92l5.53-2.67L10 3.58 4.47 6.25Zm-2.4 3.9a.75.75 0 0 1 1-.35L10 13.17l6.93-3.37a.75.75 0 1 1 .66 1.35l-7.26 3.5a.75.75 0 0 1-.66 0l-7.25-3.5a.75.75 0 0 1-.35-1Z"/>',
@@ -341,17 +340,6 @@ function overviewHTML() {
         state.engine === "running" ? "Loading…" : "Start the proxy to see the base URL and API key."
       }</div></div>`;
 
-  const c = state.cloaking;
-  const cloakOn = c.claude && c.codex;
-  const caption =
-    c.claude && c.codex
-      ? "Each request is disguised to match its model."
-      : !c.claude && !c.codex
-        ? "Requests keep the calling client's identity."
-        : "Partially on. See Settings → Advanced.";
-  const route = (models, identity, on) =>
-    `<div class="route">${esc(models)} ${icon("arrow")} ${on ? `<b>${esc(identity)}</b>` : `<span class="off">no disguise</span>`}</div>`;
-
   const usage = state.usage
     ? `<div class="usage" title="${state.usage.failures} failed requests today">${icon("chart")}${state.usage.requests} requests · ${formatTokens(
         state.usage.tokens.total,
@@ -363,14 +351,6 @@ function overviewHTML() {
     <div class="card">${accounts}</div>
     <h2 class="section-title">Connect</h2>
     <div class="card">${connect}</div>
-    <h2 class="section-title">Cloaking</h2>
-    <div class="card">
-      <div class="row">
-        <div class="grow"><div class="label">Cloak requests</div><div class="caption">${esc(caption)}</div></div>
-        ${toggle("cloak", cloakOn, "setCloaking", { disabled: !running(), label: "Cloak requests" })}
-      </div>
-      <div class="routes">${route("Claude models", "Claude Code", c.claude)}${route("GPT / Codex models", "Codex CLI", c.codex)}</div>
-    </div>
     ${usage}`;
 }
 
@@ -428,6 +408,13 @@ function settingsHTML() {
   const portValid = /^\d+$/.test(port) && +port >= 1024 && +port <= 65535;
   const commit = state.engineCommit ? `CLIProxyAPI @ ${state.engineCommit.slice(0, 12)}` : "bundled";
   const version = state.build ? `${state.version} (${state.build})` : state.version;
+  const cloak = state.cloaking;
+  const cloakCaption =
+    cloak.claude && cloak.codex
+      ? "Claude models go out as Claude Code, GPT / Codex as Codex CLI."
+      : !cloak.claude && !cloak.codex
+        ? "Requests keep the calling client's identity."
+        : "Partially on. Adjust each side below.";
 
   return `
     <h2 class="section-title">General</h2>
@@ -452,25 +439,6 @@ function settingsHTML() {
     ${grantsHTML()}
     <p class="footnote">Revoking an app turns off its key right away. Regenerating your API key leaves connected apps working.</p>
 
-    <h2 class="section-title">Advanced: Cloaking</h2>
-    <div class="card">
-      <div class="row"><div class="grow label">Disguise Claude requests as Claude Code</div>${toggle("c1", state.cloaking.claude, "setClaudeCloaking", {
-        disabled: !running(),
-        label: "Disguise Claude requests as Claude Code",
-      })}</div>
-      <div class="row"><div class="grow label">Send official Codex CLI headers for GPT / Codex</div>${toggle("c2", state.cloaking.codex, "setCodexCloaking", {
-        disabled: !running(),
-        label: "Send official Codex CLI headers",
-      })}</div>
-      <div class="row"><div class="grow label">Cloak Claude model IDs in <span class="mono">/v1/models</span></div>${toggle(
-        "c3",
-        state.cloaking.claudeModelList,
-        "setClaudeCloakModelList",
-        { disabled: !running(), label: "Cloak Claude model IDs" },
-      )}</div>
-    </div>
-    <p class="footnote">The disguise follows the requested model. Requests that already come from Claude Code are passed through unchanged.</p>
-
     <h2 class="section-title">Updates</h2>
     <div class="card">
       <div class="row"><div class="grow label">Check for updates automatically</div>${toggle("u1", s.autoCheckUpdates, "setAutoCheckUpdates", {
@@ -493,6 +461,29 @@ function settingsHTML() {
         }
       </div>
     </div>
+
+    <h2 class="section-title">Advanced: Cloaking</h2>
+    <div class="card">
+      <div class="row">
+        <div class="grow"><div class="label">Cloak requests</div><div class="caption">${esc(cloakCaption)}</div></div>
+        ${toggle("cloak", cloak.claude && cloak.codex, "setCloaking", { disabled: !running(), label: "Cloak requests" })}
+      </div>
+      <div class="row"><div class="grow label">Disguise Claude requests as Claude Code</div>${toggle("c1", state.cloaking.claude, "setClaudeCloaking", {
+        disabled: !running(),
+        label: "Disguise Claude requests as Claude Code",
+      })}</div>
+      <div class="row"><div class="grow label">Send official Codex CLI headers for GPT / Codex</div>${toggle("c2", state.cloaking.codex, "setCodexCloaking", {
+        disabled: !running(),
+        label: "Send official Codex CLI headers",
+      })}</div>
+      <div class="row"><div class="grow label">Cloak Claude model IDs in <span class="mono">/v1/models</span></div>${toggle(
+        "c3",
+        state.cloaking.claudeModelList,
+        "setClaudeCloakModelList",
+        { disabled: !running(), label: "Cloak Claude model IDs" },
+      )}</div>
+    </div>
+    <p class="footnote">The disguise follows the requested model. Requests that already come from Claude Code are passed through unchanged.</p>
 
     <h2 class="section-title">About</h2>
     <div class="card">

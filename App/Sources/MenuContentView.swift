@@ -33,13 +33,6 @@ struct MenuContentView: View {
 
             Divider()
 
-            PanelSection(title: "Cloaking") {
-                CloakingPanel()
-            }
-            .disabled(model.engineState != .running)
-
-            Divider()
-
             footer
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
@@ -196,58 +189,6 @@ private struct ErrorBanner: View {
         }
         .padding(8)
         .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
-    }
-}
-
-private struct CloakingPanel: View {
-    @EnvironmentObject private var model: AppModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Toggle(isOn: Binding(
-                get: { model.cloakingEnabled },
-                set: { on in Task { await model.setCloaking(on) } }
-            )) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Cloak requests")
-                    Text(caption).font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            .toggleStyle(.switch)
-            .controlSize(.mini)
-
-            VStack(alignment: .leading, spacing: 4) {
-                CloakRoute(models: "Claude models", identity: "Claude Code", on: model.claudeCloaking)
-                CloakRoute(models: "GPT / Codex models", identity: "Codex CLI", on: model.codexCloaking)
-            }
-            .padding(.leading, 2)
-        }
-    }
-
-    private var caption: String {
-        switch (model.claudeCloaking, model.codexCloaking) {
-        case (true, true): return "Each request is disguised to match its model."
-        case (false, false): return "Requests keep the calling client's identity."
-        default: return "Partially on. See Settings → Advanced."
-        }
-    }
-}
-
-private struct CloakRoute: View {
-    let models: String
-    let identity: String
-    let on: Bool
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Text(models)
-            Image(systemName: "arrow.right").imageScale(.small)
-            Text(on ? identity : "no disguise")
-                .fontWeight(on ? .medium : .regular)
-                .foregroundStyle(on ? Color.primary : Color.secondary)
-        }
-        .font(.caption)
-        .foregroundStyle(.secondary)
     }
 }
 

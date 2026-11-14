@@ -27,7 +27,8 @@ struct TollgateApp: App {
                 .environmentObject(model)
                 .environmentObject(updater)
         }
-        .windowResizability(.contentSize)
+        .defaultSize(width: 460, height: 620)
+        .windowResizability(.contentMinSize)
     }
 }
 
