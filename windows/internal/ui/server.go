@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/dylancetin/cli-tollgate/windows/internal/core"
+	"github.com/dylancetin/cli-tollgate/windows/internal/i18n"
 )
 
 //go:embed web
@@ -77,6 +78,7 @@ func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /auth", s.handleAuth)
 	mux.Handle("GET /", s.requireCookie(noCache(files)))
+	mux.Handle("GET /lang.js", s.requireCookie(noCache(http.HandlerFunc(handleLang))))
 	mux.Handle("GET /api/state", s.requireAPI(http.HandlerFunc(s.handleState)))
 	mux.Handle("POST /api/{action}", s.requireAPI(http.HandlerFunc(s.handleAction)))
 	return s.checkHost(securityHeaders(mux))
@@ -107,6 +109,12 @@ func noCache(next http.Handler) http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		next.ServeHTTP(w, r)
 	})
+}
+
+// handleLang tells the page which language to show (see web/i18n.js).
+func handleLang(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	fmt.Fprintf(w, "window.TOLLGATE_LANG = %q;\n", i18n.Lang())
 }
 
 func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {

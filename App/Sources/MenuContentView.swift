@@ -88,9 +88,9 @@ struct MenuContentView: View {
 
     private var statusText: String {
         switch model.engineState {
-        case .running: return "Running on \(model.baseURL)"
-        case .starting: return "Starting…"
-        case .stopped: return "Stopped"
+        case .running: return String(localized: "Running on \(model.baseURL)")
+        case .starting: return String(localized: "Starting…")
+        case .stopped: return String(localized: "Stopped")
         case let .failed(message): return message
         }
     }
@@ -144,15 +144,16 @@ func formatTokens(_ n: Int) -> String {
 // MARK: - Building blocks
 
 private struct PanelSection<Content: View>: View {
-    let title: String
+    let title: LocalizedStringKey
     @ViewBuilder var content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title.uppercased())
+            Text(title)
                 .font(.caption2.weight(.semibold))
                 .tracking(0.6)
                 .foregroundStyle(.secondary)
+                .textCase(.uppercase)
             content
         }
         .padding(.horizontal, 14)
@@ -162,7 +163,7 @@ private struct PanelSection<Content: View>: View {
 
 private struct FooterButton: View {
     let symbol: String
-    let help: String
+    let help: LocalizedStringKey
     let action: () -> Void
 
     var body: some View {
@@ -251,11 +252,11 @@ private struct AccountRow: View {
     private var account: Credential? { model.accounts[provider] }
 
     private var detailText: String {
-        if model.loginInProgress == provider { return "Finish signing in in your browser…" }
+        if model.loginInProgress == provider { return String(localized: "Finish signing in in your browser…") }
         guard let account else { return provider.subtitle }
-        if account.disabled == true { return "Disabled" }
+        if account.disabled == true { return String(localized: "Disabled") }
         if account.unavailable == true {
-            return account.statusMessage.flatMap { $0.isEmpty ? nil : $0 } ?? "Cooling down (rate limited)"
+            return account.statusMessage.flatMap { $0.isEmpty ? nil : $0 } ?? String(localized: "Cooling down (rate limited)")
         }
         return account.displayName
     }
@@ -275,9 +276,9 @@ private struct ConnectPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            CopyRow(label: "Base URL", value: model.baseURL, display: model.baseURL, copied: $copied)
+            CopyRow(label: String(localized: "Base URL"), value: model.baseURL, display: model.baseURL, copied: $copied)
             CopyRow(
-                label: "API key",
+                label: String(localized: "API key"),
                 value: model.apiKey,
                 display: revealKey ? model.apiKey : masked(model.apiKey),
                 copied: $copied
@@ -292,7 +293,10 @@ private struct ConnectPanel: View {
                     }
                 }
             } label: {
-                Label(copied.map { "Copied \($0)" } ?? "Copy setup for…", systemImage: "doc.on.clipboard")
+                Label(
+                    copied.map { String(localized: "Copied \($0)") } ?? String(localized: "Copy setup for…"),
+                    systemImage: "doc.on.clipboard"
+                )
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
@@ -324,7 +328,8 @@ private struct CopyRow: View {
 
     var body: some View {
         HStack {
-            Text(label).font(.caption).foregroundStyle(.secondary).frame(width: 58, alignment: .leading)
+            Text(label).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                .frame(width: labelWidth, alignment: .leading)
             Text(display)
                 .font(.system(.caption, design: .monospaced))
                 .lineLimit(1)
@@ -342,5 +347,10 @@ private struct CopyRow: View {
             .buttonStyle(.borderless)
             .help("Copy \(label)")
         }
+    }
+
+    /// Wide enough for the Turkish "API anahtarı".
+    private var labelWidth: CGFloat {
+        Bundle.main.preferredLocalizations.first == "tr" ? 74 : 58
     }
 }

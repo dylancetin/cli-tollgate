@@ -30,6 +30,9 @@ and your config never leave your computer.
 - **Copy setup** for Claude Code, Codex CLI, OpenAI-compatible SDKs, `fetch()` and `curl`.
 - **Today's usage** (requests and tokens) in the menu, from the engine's usage tracker.
 - **Launch at login**, port setting, API-key rotation, logs, crash auto-restart.
+- **English and Turkish**: both apps switch to Turkish when it is the system language (macOS: the
+  preferred language; Windows: the display language, installer included). `TOLLGATE_LANG=tr|en`
+  overrides it for the Windows app.
 - **Auto-update** via [Sparkle](https://sparkle-project.org). The feed is the `appcast.xml` attached to
   the latest GitHub release, so no website is needed.
 

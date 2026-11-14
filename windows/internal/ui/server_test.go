@@ -59,6 +59,12 @@ func TestAccessControl(t *testing.T) {
 	if got := status(c, "GET", s.URL("models"), nil, ""); got != 200 {
 		t.Fatalf("auth + redirect to page: %d", got)
 	}
+	if got := status(anon, "GET", base+"/lang.js", nil, ""); got != 403 {
+		t.Fatalf("lang.js without cookie: %d", got)
+	}
+	if got := status(c, "GET", base+"/lang.js", nil, ""); got != 200 {
+		t.Fatalf("lang.js with cookie: %d", got)
+	}
 	api := map[string]string{"X-Tollgate": "1"}
 	if got := status(c, "GET", base+"/api/state", api, ""); got != 200 {
 		t.Fatalf("state with cookie+header: %d", got)

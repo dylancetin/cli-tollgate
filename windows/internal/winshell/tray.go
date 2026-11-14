@@ -11,6 +11,8 @@ import (
 
 	"github.com/dylancetin/cli-tollgate/windows/internal/core"
 	"github.com/dylancetin/cli-tollgate/windows/internal/ico"
+
+	"github.com/dylancetin/cli-tollgate/windows/internal/i18n"
 )
 
 // tray is the notification-area icon. Left click opens the window; right
@@ -53,14 +55,14 @@ func (t *tray) onReady() {
 	t.usage.Hide()
 	systray.AddSeparator()
 
-	t.open = systray.AddMenuItem("Open CLI Tollgate", "")
-	t.models = systray.AddMenuItem("Models…", "")
-	t.settings = systray.AddMenuItem("Settings…", "")
+	t.open = systray.AddMenuItem(i18n.T("Open CLI Tollgate"), "")
+	t.models = systray.AddMenuItem(i18n.T("Models…"), "")
+	t.settings = systray.AddMenuItem(i18n.T("Settings…"), "")
 	systray.AddSeparator()
 
-	t.copyURL = systray.AddMenuItem("Copy Base URL", "")
-	t.copyKey = systray.AddMenuItem("Copy API Key", "")
-	t.copySetup = systray.AddMenuItem("Copy Setup For", "")
+	t.copyURL = systray.AddMenuItem(i18n.T("Copy Base URL"), "")
+	t.copyKey = systray.AddMenuItem(i18n.T("Copy API Key"), "")
+	t.copySetup = systray.AddMenuItem(i18n.T("Copy Setup For"), "")
 	t.snippetItems = map[string]*systray.MenuItem{}
 	for _, s := range core.Snippets("", "") {
 		item := t.copySetup.AddSubMenuItem(menuText(s.Title), "")
@@ -79,18 +81,18 @@ func (t *tray) onReady() {
 	}
 	systray.AddSeparator()
 
-	t.cloak = systray.AddMenuItemCheckbox("Cloak Requests", "Disguise each request to match its model", true)
-	t.running = systray.AddMenuItemCheckbox("Proxy Running", "", false)
-	t.restart = systray.AddMenuItem("Restart Engine", "")
+	t.cloak = systray.AddMenuItemCheckbox(i18n.T("Cloak Requests"), i18n.T("Disguise each request to match its model"), true)
+	t.running = systray.AddMenuItemCheckbox(i18n.T("Proxy Running"), "", false)
+	t.restart = systray.AddMenuItem(i18n.T("Restart Engine"), "")
 	systray.AddSeparator()
 
-	t.install = systray.AddMenuItem("Install Update and Restart", "")
+	t.install = systray.AddMenuItem(i18n.T("Install Update and Restart"), "")
 	t.install.Hide()
-	t.checkUpdates = systray.AddMenuItem("Check for Updates…", "")
-	t.logs = systray.AddMenuItem("Open Logs", "")
-	t.dataFolder = systray.AddMenuItem("Show Data Folder", "")
+	t.checkUpdates = systray.AddMenuItem(i18n.T("Check for Updates…"), "")
+	t.logs = systray.AddMenuItem(i18n.T("Open Logs"), "")
+	t.dataFolder = systray.AddMenuItem(i18n.T("Show Data Folder"), "")
 	systray.AddSeparator()
-	t.quitItem = systray.AddMenuItem("Quit CLI Tollgate", "")
+	t.quitItem = systray.AddMenuItem(i18n.T("Quit CLI Tollgate"), "")
 
 	go t.onClick(t.open, func() { t.show("overview") })
 	go t.onClick(t.models, func() { t.show("models") })
@@ -174,19 +176,19 @@ func (t *tray) update() {
 	var statusText string
 	switch core.EngineState(s.Engine) {
 	case core.EngineRunning:
-		statusText = "Running on " + strings.TrimPrefix(s.BaseURL, "http://")
+		statusText = i18n.F("Running on %s", strings.TrimPrefix(s.BaseURL, "http://"))
 	case core.EngineStarting:
-		statusText = "Starting…"
+		statusText = i18n.T("Starting…")
 	case core.EngineStopped:
-		statusText = "Stopped"
+		statusText = i18n.T("Stopped")
 	default:
-		statusText = "Engine failed"
+		statusText = i18n.T("Engine failed")
 	}
 	t.status.SetTitle(menuText(statusText))
 	systray.SetTooltip(truncate("CLI Tollgate — "+statusText, 120))
 
 	if s.Usage != nil {
-		t.usage.SetTitle(fmt.Sprintf("Today: %d requests · %s tokens", s.Usage.Requests, formatTokens(s.Usage.Tokens.Total)))
+		t.usage.SetTitle(i18n.F("Today: %d requests · %s tokens", s.Usage.Requests, formatTokens(s.Usage.Tokens.Total)))
 		t.usage.Show()
 	} else {
 		t.usage.Hide()
@@ -198,12 +200,12 @@ func (t *tray) update() {
 		item := t.accounts[core.Provider(a.Provider)]
 		switch {
 		case a.LoggingIn:
-			item.SetTitle(menuText(a.Title + ": signing in…"))
+			item.SetTitle(menuText(i18n.F("%s: signing in…", a.Title)))
 		case a.SignedIn:
 			signedIn++
 			item.SetTitle(menuText(a.Title + ": " + a.Detail))
 		default:
-			item.SetTitle(menuText(a.Title + ": Sign In…"))
+			item.SetTitle(menuText(i18n.F("%s: Sign In…", a.Title)))
 		}
 		if running {
 			item.Enable()
@@ -220,7 +222,7 @@ func (t *tray) update() {
 	setEnabled(t.copySetup, hasKey)
 
 	if upd.Available != "" {
-		t.install.SetTitle(menuText("Install Update " + upd.Available + " and Restart"))
+		t.install.SetTitle(menuText(i18n.F("Install Update %s and Restart", upd.Available)))
 		t.install.Show()
 	} else {
 		t.install.Hide()

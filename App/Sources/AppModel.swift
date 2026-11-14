@@ -17,8 +17,8 @@ enum Provider: String, CaseIterable, Identifiable {
 
     var subtitle: String {
         switch self {
-        case .codex: return "Plus / Pro subscription via Codex"
-        case .claude: return "Pro / Max subscription"
+        case .codex: return String(localized: "Plus / Pro subscription via Codex")
+        case .claude: return String(localized: "Pro / Max subscription")
         }
     }
 
@@ -203,19 +203,19 @@ final class AppModel: ObservableObject {
                 query: ["provider": provider.engineProvider, "is_webui": "true"]
             )
             loginState = start.state
-            guard let url = URL(string: start.url) else { throw EngineError("Invalid login URL.") }
+            guard let url = URL(string: start.url) else { throw EngineError(String(localized: "Invalid login URL.")) }
             NSWorkspace.shared.open(url)
 
             let deadline = Date().addingTimeInterval(300)
             while true {
                 try await Task.sleep(nanoseconds: 1_500_000_000)
                 guard loginState == start.state else { return } // cancelled
-                guard Date() < deadline else { throw EngineError("Login timed out.") }
+                guard Date() < deadline else { throw EngineError(String(localized: "Login timed out.")) }
                 let status: AuthStatusResponse = try await client.get(
                     "/v8/management/oauth/status", query: ["state": start.state]
                 )
                 if status.status == "ok" { break }
-                if status.status == "error" { throw EngineError(status.error ?? "Login failed.") }
+                if status.status == "error" { throw EngineError(status.error ?? String(localized: "Login failed.")) }
             }
 
             // Keep exactly one account per provider: drop the ones that existed before.
@@ -382,19 +382,18 @@ final class AppModel: ObservableObject {
 
     private func prompt(for request: AccessRequest) async {
         let alert = NSAlert()
-        alert.messageText = "Allow “\(request.name)” to use your subscriptions?"
+        alert.messageText = String(localized: "Allow “\(request.name)” to use your subscriptions?")
         var info = request.origin
         if let note = request.originNote {
             info += "\n" + (note.warn ? "⚠︎ " : "") + note.text
         }
-        info += "\n\nIt will be able to send requests through your signed-in ChatGPT and Claude accounts. "
-            + "You can revoke access anytime in Settings."
+        info += "\n\n" + String(localized: "It will be able to send requests through your signed-in ChatGPT and Claude accounts. You can revoke access anytime in Settings.")
         alert.informativeText = info
         alert.alertStyle = request.originNote?.warn == true ? .warning : .informational
         // Deny is the default button so a stray Return never grants access.
-        let deny = alert.addButton(withTitle: "Deny")
+        let deny = alert.addButton(withTitle: String(localized: "Deny"))
         deny.keyEquivalent = "\r"
-        let allow = alert.addButton(withTitle: "Allow")
+        let allow = alert.addButton(withTitle: String(localized: "Allow"))
         allow.keyEquivalent = ""
         alert.window.level = .floating
         NSApp.activate(ignoringOtherApps: true)
@@ -405,7 +404,7 @@ final class AppModel: ObservableObject {
             try await client.post("/v8/management/access/requests/\(request.id)/\(verb)")
             if allowed { await refreshGrants() }
         } catch APIError.status(404, _) {
-            lastError = "The request from \(request.name) expired before it was answered."
+            lastError = String(localized: "The request from \(request.name) expired before it was answered.")
         } catch {
             report(error)
         }

@@ -3,6 +3,8 @@ package core
 import (
 	"fmt"
 	"runtime"
+
+	"github.com/dylancetin/cli-tollgate/windows/internal/i18n"
 )
 
 // Snippet is a copy-ready setup block for a client.
@@ -25,7 +27,7 @@ func powershellSnippets(baseURL, apiKey string) []Snippet {
 	return []Snippet{
 		{"claudeCode", "Claude Code (PowerShell)", fmt.Sprintf(
 			"$env:ANTHROPIC_BASE_URL = \"%s\"\n$env:ANTHROPIC_AUTH_TOKEN = \"%s\"\nclaude", baseURL, apiKey)},
-		{"claudeCodePersistent", "Claude Code (all new terminals)", fmt.Sprintf(
+		{"claudeCodePersistent", i18n.T("Claude Code (all new terminals)"), fmt.Sprintf(
 			"setx ANTHROPIC_BASE_URL \"%s\"\nsetx ANTHROPIC_AUTH_TOKEN \"%s\"\n# open a new terminal, then run: claude", baseURL, apiKey)},
 		{"codex", "Codex CLI", fmt.Sprintf(`# %%USERPROFILE%%\.codex\config.toml
 model_provider = "tollgate"
@@ -38,10 +40,10 @@ wire_api = "responses"
 
 # then in PowerShell:
 # setx TOLLGATE_API_KEY "%s"`, baseURL, apiKey)},
-		{"openAI", "OpenAI-compatible SDK (PowerShell)", fmt.Sprintf(
+		{"openAI", i18n.T("OpenAI-compatible SDK (PowerShell)"), fmt.Sprintf(
 			"$env:OPENAI_BASE_URL = \"%s/v1\"\n$env:OPENAI_API_KEY = \"%s\"", baseURL, apiKey)},
-		{"webFetch", "Web page (fetch)", fetchSnippet(baseURL, apiKey)},
-		{"curl", "curl test", fmt.Sprintf(`curl.exe -s %s/v1/models -H "Authorization: Bearer %s"`, baseURL, apiKey)},
+		{"webFetch", i18n.T("Web page (fetch)"), fetchSnippet(baseURL, apiKey)},
+		{"curl", i18n.T("curl test"), fmt.Sprintf(`curl.exe -s %s/v1/models -H "Authorization: Bearer %s"`, baseURL, apiKey)},
 	}
 }
 
@@ -60,10 +62,10 @@ wire_api = "responses"
 
 # then in your shell:
 # export TOLLGATE_API_KEY="%s"`, baseURL, apiKey)},
-		{"openAI", "OpenAI-compatible SDK", fmt.Sprintf(
+		{"openAI", i18n.T("OpenAI-compatible SDK"), fmt.Sprintf(
 			"export OPENAI_BASE_URL=\"%s/v1\"\nexport OPENAI_API_KEY=\"%s\"", baseURL, apiKey)},
-		{"webFetch", "Web page (fetch)", fetchSnippet(baseURL, apiKey)},
-		{"curl", "curl test", fmt.Sprintf(`curl -s %s/v1/models -H "Authorization: Bearer %s"`, baseURL, apiKey)},
+		{"webFetch", i18n.T("Web page (fetch)"), fetchSnippet(baseURL, apiKey)},
+		{"curl", i18n.T("curl test"), fmt.Sprintf(`curl -s %s/v1/models -H "Authorization: Bearer %s"`, baseURL, apiKey)},
 	}
 }
 

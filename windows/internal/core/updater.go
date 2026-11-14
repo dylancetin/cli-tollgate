@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/dylancetin/cli-tollgate/windows/internal/i18n"
 )
 
 // Update feed and signing key. The key is the same Ed25519 key Sparkle uses
@@ -104,7 +106,7 @@ func (u *Updater) StartSchedule() {
 func (u *Updater) Check(interactive bool) {
 	if !u.supported() {
 		if interactive {
-			u.setMessage("Updates are only available in released builds.")
+			u.setMessage(i18n.T("Updates are only available in released builds."))
 		}
 		return
 	}
@@ -122,7 +124,7 @@ func (u *Updater) Check(interactive bool) {
 	u.checking = false
 	switch {
 	case err != nil && interactive:
-		u.message = "Update check failed: " + err.Error()
+		u.message = i18n.F("Update check failed: %s", err.Error())
 	case err == nil && (interactive || u.ready != nil):
 		u.message = msg
 	}
@@ -145,13 +147,13 @@ func (u *Updater) check() (string, error) {
 		return "", err
 	}
 	if feed.Build <= u.app.Build {
-		return fmt.Sprintf("CLI Tollgate %s is the latest version.", u.app.Version), nil
+		return i18n.F("CLI Tollgate %s is the latest version.", u.app.Version), nil
 	}
 	u.mu.Lock()
 	already := u.ready != nil && u.ready.Build == feed.Build
 	u.mu.Unlock()
 	if already {
-		return fmt.Sprintf("Version %s is ready to install.", feed.Version), nil
+		return i18n.F("Version %s is ready to install.", feed.Version), nil
 	}
 
 	path, err := downloadVerified(feed, u.app.Paths.Updates())
@@ -161,7 +163,7 @@ func (u *Updater) check() (string, error) {
 	u.mu.Lock()
 	u.ready, u.readyPath = feed, path
 	u.mu.Unlock()
-	return fmt.Sprintf("Version %s is ready to install.", feed.Version), nil
+	return i18n.F("Version %s is ready to install.", feed.Version), nil
 }
 
 // InstallNow runs the downloaded installer and quits; the installer restarts the app.
@@ -170,7 +172,7 @@ func (u *Updater) InstallNow() error {
 	path := u.readyPath
 	u.mu.Unlock()
 	if path == "" {
-		return errors.New("no update has been downloaded")
+		return errors.New(i18n.T("no update has been downloaded"))
 	}
 	u.app.Engine.StopAndWait(4 * time.Second)
 	if err := u.InstallFunc(path, true); err != nil {
@@ -207,7 +209,7 @@ func fetchFeed(ctx context.Context, feedURL string) (*UpdateFeed, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, errors.New("no Windows release has been published yet")
+		return nil, errors.New(i18n.T("no Windows release has been published yet"))
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("update feed returned %s", resp.Status)
@@ -272,7 +274,7 @@ func VerifyUpdate(data []byte, feed *UpdateFeed) error {
 	}
 	sig, err := base64.StdEncoding.DecodeString(strings.TrimSpace(feed.Signature))
 	if err != nil || !ed25519.Verify(ed25519.PublicKey(pub), data, sig) {
-		return errors.New("update signature is not valid; refusing to install")
+		return errors.New(i18n.T("update signature is not valid; refusing to install"))
 	}
 	return nil
 }

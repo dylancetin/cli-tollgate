@@ -153,16 +153,17 @@ struct SettingsView: View {
 
     private var cloakingCaption: String {
         switch (model.claudeCloaking, model.codexCloaking) {
-        case (true, true): return "Claude models go out as Claude Code, GPT / Codex as Codex CLI."
-        case (false, false): return "Requests keep the calling client's identity."
-        default: return "Partially on. Adjust each side below."
+        case (true, true): return String(localized: "Claude models go out as Claude Code, GPT / Codex as Codex CLI.")
+        case (false, false): return String(localized: "Requests keep the calling client's identity.")
+        default: return String(localized: "Partially on. Adjust each side below.")
         }
     }
 
     private func grantCaption(_ grant: AccessGrant) -> String {
         var parts = [grant.origin]
         if let date = grant.grantedDate {
-            parts.append("allowed " + date.formatted(date: .abbreviated, time: .omitted))
+            let day = date.formatted(date: .abbreviated, time: .omitted)
+            parts.append(String(localized: "allowed \(day)"))
         }
         parts.append(grant.keyHint)
         return parts.joined(separator: " · ")
@@ -182,7 +183,7 @@ struct SettingsView: View {
 
     private var engineCommit: String {
         guard let url = Bundle.main.url(forResource: "engine-commit", withExtension: "txt"),
-              let text = try? String(contentsOf: url, encoding: .utf8) else { return "bundled" }
+              let text = try? String(contentsOf: url, encoding: .utf8) else { return String(localized: "bundled") }
         return "CLIProxyAPI @ " + String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(12))
     }
 }

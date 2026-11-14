@@ -14,9 +14,9 @@ enum ClientSnippet: String, CaseIterable, Identifiable {
         switch self {
         case .claudeCode: return "Claude Code"
         case .codex: return "Codex CLI"
-        case .openAI: return "OpenAI-compatible SDK"
-        case .webFetch: return "Web page (fetch)"
-        case .curl: return "curl test"
+        case .openAI: return String(localized: "OpenAI-compatible SDK")
+        case .webFetch: return String(localized: "Web page (fetch)")
+        case .curl: return String(localized: "curl test")
         }
     }
 

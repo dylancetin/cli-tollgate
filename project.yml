@@ -5,6 +5,7 @@ options:
   deploymentTarget:
     macOS: "13.0"
   createIntermediateGroups: true
+  developmentLanguage: en
 
 packages:
   Sparkle:
@@ -31,6 +32,10 @@ targets:
       properties:
         CFBundleName: CLI Tollgate
         CFBundleDisplayName: CLI Tollgate
+        # English and Turkish (App/Resources/*.lproj). macOS picks Turkish when
+        # it is the user's preferred language.
+        CFBundleDevelopmentRegion: en
+        CFBundleLocalizations: [en, tr]
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)

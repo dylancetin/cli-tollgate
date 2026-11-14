@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/dylancetin/cli-tollgate/windows/internal/i18n"
 )
 
 // Management is a thin client for the engine's /v8/management API on loopback.
@@ -37,7 +39,7 @@ type APIError struct {
 	Message string
 }
 
-func (e *APIError) Error() string { return fmt.Sprintf("Engine returned %d: %s", e.Status, e.Message) }
+func (e *APIError) Error() string { return i18n.F("Engine returned %d: %s", e.Status, e.Message) }
 
 func isNotFound(err error) bool {
 	var api *APIError

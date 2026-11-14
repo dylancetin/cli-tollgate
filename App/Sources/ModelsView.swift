@@ -29,7 +29,7 @@ struct ModelsView: View {
             if models.isEmpty {
                 VStack(spacing: 6) {
                     Image(systemName: "square.stack.3d.up.slash").font(.title2)
-                    Text(model.engineState == .running ? "No models in the catalog." : "Start the proxy to load models.")
+                    model.engineState == .running ? Text("No models in the catalog.") : Text("Start the proxy to load models.")
                 }
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

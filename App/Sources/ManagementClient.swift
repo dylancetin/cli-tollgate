@@ -104,8 +104,9 @@ enum APIError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case let .status(code, message): return "Engine returned \(code): \(message)"
-        case let .decoding(path, error): return "Unexpected response from \(path): \(error.localizedDescription)"
+        case let .status(code, message): return String(localized: "Engine returned \(code): \(message)")
+        case let .decoding(path, error):
+            return String(localized: "Unexpected response from \(path): \(error.localizedDescription)")
         }
     }
 }
@@ -239,12 +240,12 @@ struct AccessRequest: Decodable, Identifiable, Equatable {
 
     /// What to tell the user about the origin; `warn` marks the risky cases.
     var originNote: (text: String, warn: Bool)? {
-        if origin == "local program" { return ("A program on this computer, not a web page.", true) }
+        if origin == "local program" { return (String(localized: "A program on this computer, not a web page."), true) }
         let local = ["http://localhost", "http://127.0.0.1", "http://[::1]"]
         if local.contains(where: { origin == $0 || origin.hasPrefix($0 + ":") }) {
-            return ("A page served from this computer.", false)
+            return (String(localized: "A page served from this computer."), false)
         }
-        if origin.hasPrefix("http://") { return ("Not a secure (https) site.", true) }
+        if origin.hasPrefix("http://") { return (String(localized: "Not a secure (https) site."), true) }
         return nil
     }
 }

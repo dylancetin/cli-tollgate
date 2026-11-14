@@ -1,0 +1,111 @@
+/* CLI Tollgate — Turkish. Keys are the English source strings. */
+
+/* Menu bar panel */
+"Accounts" = "Hesaplar";
+"Connect" = "Bağlantı";
+"Start or stop the local proxy" = "Yerel proxy'yi başlat veya durdur";
+"Running on %@" = "%@ üzerinde çalışıyor";
+"Starting…" = "Başlatılıyor…";
+"Stopped" = "Durduruldu";
+"%lld req · %@ today" = "Bugün %1$lld istek · %2$@";
+"%lld failed requests today" = "Bugün %lld başarısız istek";
+"Models" = "Modeller";
+"Settings" = "Ayarlar";
+"Check for Updates…" = "Güncellemeleri Denetle…";
+"Restart Engine" = "Motoru Yeniden Başlat";
+"Open Logs" = "Günlükleri Aç";
+"Show Data Folder" = "Veri Klasörünü Göster";
+"Quit CLI Tollgate" = "CLI Tollgate'ten Çık";
+"Cancel" = "İptal";
+"Switch Account…" = "Hesap Değiştir…";
+"Sign Out" = "Çıkış Yap";
+"Sign in" = "Giriş yap";
+"Finish signing in in your browser…" = "Girişi tarayıcınızda tamamlayın…";
+"Disabled" = "Devre dışı";
+"Cooling down (rate limited)" = "Bekleme süresinde (hız sınırı)";
+"Plus / Pro subscription via Codex" = "Codex üzerinden Plus / Pro aboneliği";
+"Pro / Max subscription" = "Pro / Max aboneliği";
+"Base URL" = "Temel URL";
+"API key" = "API anahtarı";
+"Copied %@" = "Kopyalandı: %@";
+"Copy setup for…" = "Kurulumu kopyala…";
+"Copy %@" = "Kopyala: %@";
+
+/* Setup snippets */
+"OpenAI-compatible SDK" = "OpenAI uyumlu SDK";
+"Web page (fetch)" = "Web sayfası (fetch)";
+"curl test" = "curl testi";
+
+/* Settings window */
+"CLI Tollgate Settings" = "CLI Tollgate Ayarları";
+"General" = "Genel";
+"Launch at login" = "Oturum açıldığında başlat";
+"Proxy" = "Proxy";
+"Port" = "Port";
+"Apply" = "Uygula";
+"Listens on" = "Dinlediği adres";
+"127.0.0.1 only" = "Yalnızca 127.0.0.1";
+"Regenerate…" = "Yeniden Oluştur…";
+"Web pages can call the proxy (CORS is open), but every request needs the API key." = "Web sayfaları proxy'yi çağırabilir (CORS açık), ancak her istek API anahtarı gerektirir.";
+"Connected apps" = "Bağlı uygulamalar";
+"No apps yet. When a web app asks for access, CLI Tollgate asks you first." = "Henüz uygulama yok. Bir web uygulaması erişim istediğinde CLI Tollgate önce size sorar.";
+"Revoke…" = "Erişimi Kaldır…";
+"allowed %@" = "izin verildi: %@";
+"Revoking an app turns off its key right away. Regenerating your API key leaves connected apps working." = "Bir uygulamanın erişimini kaldırmak anahtarını hemen devre dışı bırakır. API anahtarınızı yeniden oluşturmak bağlı uygulamaları etkilemez.";
+"Updates" = "Güncellemeler";
+"Check for updates automatically" = "Güncellemeleri otomatik denetle";
+"Download and install updates automatically" = "Güncellemeleri otomatik indir ve yükle";
+"Check Now" = "Şimdi Denetle";
+"Advanced: Cloaking" = "Gelişmiş: Kamuflaj";
+"Cloak requests" = "İstekleri kamufle et";
+"Claude models go out as Claude Code, GPT / Codex as Codex CLI." = "Claude modelleri Claude Code, GPT / Codex ise Codex CLI olarak gönderilir.";
+"Requests keep the calling client's identity." = "İstekler, çağıran istemcinin kimliğini korur.";
+"Partially on. Adjust each side below." = "Kısmen açık. Her tarafı aşağıdan ayarlayın.";
+"Disguise Claude requests as Claude Code" = "Claude isteklerini Claude Code gibi göster";
+"Send official Codex CLI headers for GPT / Codex" = "GPT / Codex için resmi Codex CLI başlıklarını gönder";
+"Cloak Claude model IDs in /v1/models" = "/v1/models içindeki Claude model kimliklerini kamufle et";
+"The disguise follows the requested model. Requests that already come from Claude Code are passed through unchanged." = "Kamuflaj istenen modele göre seçilir. Zaten Claude Code'dan gelen istekler değiştirilmeden iletilir.";
+"About" = "Hakkında";
+"Version" = "Sürüm";
+"Engine" = "Motor";
+"bundled" = "paketle birlikte";
+"Regenerate the API key?" = "API anahtarı yeniden oluşturulsun mu?";
+"Regenerate" = "Yeniden Oluştur";
+"Clients using the current key will stop working until you update them. Connected apps keep their own keys." = "Mevcut anahtarı kullanan istemciler, siz onları güncelleyene kadar çalışmaz. Bağlı uygulamalar kendi anahtarlarını korur.";
+"Revoke access for “%@”?" = "“%@” için erişim kaldırılsın mı?";
+"Revoke" = "Erişimi Kaldır";
+"Its key stops working right away. It can ask for access again later." = "Anahtarı hemen çalışmayı durdurur. Daha sonra yeniden erişim isteyebilir.";
+
+/* Models window */
+"Provider" = "Sağlayıcı";
+"Filter" = "Filtrele";
+"No models in the catalog." = "Katalogda model yok.";
+"Start the proxy to load models." = "Modelleri yüklemek için proxy'yi başlatın.";
+"%lld of %lld exposed" = "%1$lld/%2$lld açık";
+"· not signed in to %@" = "· %@ hesabına giriş yapılmadı";
+"Hide All" = "Tümünü Gizle";
+"Show All" = "Tümünü Göster";
+"Expose this model to clients" = "Bu modeli istemcilere aç";
+"· %lldk context" = "· %lldk bağlam";
+"alias" = "takma ad";
+"Extra client-visible name for this model. The original ID keeps working." = "Bu model için istemcilerin göreceği ek ad. Orijinal kimlik çalışmaya devam eder.";
+
+/* Access requests */
+"Allow “%@” to use your subscriptions?" = "“%@” aboneliklerinizi kullanabilsin mi?";
+"It will be able to send requests through your signed-in ChatGPT and Claude accounts. You can revoke access anytime in Settings." = "Giriş yaptığınız ChatGPT ve Claude hesaplarınız üzerinden istek gönderebilecek. Erişimi istediğiniz zaman Ayarlar'dan kaldırabilirsiniz.";
+"Deny" = "Reddet";
+"Allow" = "İzin Ver";
+"The request from %@ expired before it was answered." = "%@ uygulamasından gelen isteğin süresi, yanıtlanmadan doldu.";
+"A program on this computer, not a web page." = "Bu bilgisayardaki bir program, web sayfası değil.";
+"A page served from this computer." = "Bu bilgisayardan sunulan bir sayfa.";
+"Not a secure (https) site." = "Güvenli (https) bir site değil.";
+
+/* Errors */
+"Invalid login URL." = "Geçersiz giriş adresi.";
+"Login timed out." = "Giriş zaman aşımına uğradı.";
+"Login failed." = "Giriş başarısız oldu.";
+"Engine returned %lld: %@" = "Motor %1$lld döndürdü: %2$@";
+"Unexpected response from %@: %@" = "%1$@ adresinden beklenmeyen yanıt: %2$@";
+"The proxy engine is missing from the app bundle." = "Proxy motoru uygulama paketinde bulunamadı.";
+"The engine did not answer on port %lld. %@" = "Motor %1$lld portunda yanıt vermedi. %2$@";
+"The engine exited (status %lld). %@" = "Motor kapandı (durum %1$lld). %2$@";

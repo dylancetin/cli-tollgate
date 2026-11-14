@@ -53,12 +53,12 @@ async function call(action, body) {
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      toast(data.error || `Request failed (${res.status})`);
+      toast(data.error || t("Request failed ({0})", res.status));
       return false;
     }
     return true;
   } catch (e) {
-    toast("CLI Tollgate is not responding.");
+    toast(t("CLI Tollgate is not responding."));
     return false;
   }
 }
@@ -72,7 +72,7 @@ async function poll() {
         cache: "no-store",
       });
       if (res.status === 403) {
-        showDisconnected("This page has expired. Open CLI Tollgate from its tray icon.");
+        showDisconnected(t("This page has expired. Open CLI Tollgate from its tray icon."));
         return;
       }
       if (!res.ok) throw new Error(String(res.status));
@@ -80,7 +80,7 @@ async function poll() {
       since = state.revision;
       render();
     } catch (e) {
-      showDisconnected("CLI Tollgate is not running.");
+      showDisconnected(t("CLI Tollgate is not running."));
       await new Promise((r) => setTimeout(r, 1500));
       since = "";
     }
@@ -137,9 +137,10 @@ function toggle(id, checked, action, { disabled = false, label = "" } = {}) {
 
 function copyButton(id, text, label) {
   const done = ui.copied === id;
-  return `<button class="icon-btn ${done ? "ok" : ""}" data-click="copy" data-id="${id}" data-text="${esc(text)}" title="Copy ${esc(
-    label,
-  )}" aria-label="Copy ${esc(label)}">${icon(done ? "check" : "copy")}</button>`;
+  const title = esc(t("Copy {0}", label));
+  return `<button class="icon-btn ${done ? "ok" : ""}" data-click="copy" data-id="${id}" data-text="${esc(text)}" title="${title}" aria-label="${title}">${icon(
+    done ? "check" : "copy",
+  )}</button>`;
 }
 
 // ---- Rendering ------------------------------------------------------------
@@ -172,14 +173,14 @@ function render() {
 
 function formatDate(iso) {
   const d = new Date(iso);
-  return isNaN(d) ? "" : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return isNaN(d) ? "" : d.toLocaleDateString(LOCALE, { month: "short", day: "numeric", year: "numeric" });
 }
 
 // What to say about where a request comes from; warn marks the risky cases.
 function originNote(origin) {
-  if (origin === "local program") return { text: "A program on this computer, not a web page.", warn: true };
-  if (/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(origin)) return { text: "A page served from this computer.", warn: false };
-  if (origin.startsWith("http://")) return { text: "Not a secure (https) site.", warn: true };
+  if (origin === "local program") return { text: t("A program on this computer, not a web page."), warn: true };
+  if (/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(origin)) return { text: t("A page served from this computer."), warn: false };
+  if (origin.startsWith("http://")) return { text: t("Not a secure (https) site."), warn: true };
   return null;
 }
 
@@ -197,19 +198,20 @@ function renderAccess() {
     return;
   }
   const note = originNote(req.origin);
-  const more = reqs.length > 1 ? `<p class="caption">${reqs.length - 1} more request${reqs.length > 2 ? "s" : ""} waiting.</p>` : "";
+  const waiting = reqs.length - 1;
+  const more = waiting > 0 ? `<p class="caption">${waiting === 1 ? t("1 more request waiting.") : t("{0} more requests waiting.", waiting)}</p>` : "";
   const html = `<div class="dialog access-dialog" role="alertdialog" aria-modal="true" aria-labelledby="access-title">
       <div class="body">
         <div class="access-icon">${icon("key")}</div>
-        <h2 id="access-title">Allow “${esc(req.name)}” to use your subscriptions?</h2>
+        <h2 id="access-title">${esc(t("Allow “{0}” to use your subscriptions?", req.name))}</h2>
         <div class="origin mono" title="${esc(req.origin)}">${esc(req.origin)}</div>
         ${note ? `<p class="caption ${note.warn ? "warn" : ""}">${esc(note.text)}</p>` : ""}
-        <p>It will be able to send requests through your signed-in ChatGPT and Claude accounts. You can revoke access anytime in Settings.</p>
+        <p>${t("It will be able to send requests through your signed-in ChatGPT and Claude accounts. You can revoke access anytime in Settings.")}</p>
         ${more}
       </div>
       <div class="actions">
-        <button class="btn accent" data-click="allowAccess" data-id="${esc(req.id)}" data-name="${esc(req.name)}">Allow</button>
-        <button class="btn" data-click="denyAccess" data-id="${esc(req.id)}">Deny</button>
+        <button class="btn accent" data-click="allowAccess" data-id="${esc(req.id)}" data-name="${esc(req.name)}">${t("Allow")}</button>
+        <button class="btn" data-click="denyAccess" data-id="${esc(req.id)}">${t("Deny")}</button>
       </div>
     </div>`;
   if (lastHTML.access === html) return;
@@ -229,29 +231,29 @@ function grantsHTML() {
         <div class="tile">${icon("key")}</div>
         <div class="grow">
           <div class="label truncate" title="${esc(g.name)}">${esc(g.name)}</div>
-          <div class="caption truncate" title="${esc(g.origin)}">${esc(g.origin)} · allowed ${esc(formatDate(g.granted_at))} · <span class="mono">${esc(g.key_hint)}</span></div>
+          <div class="caption truncate" title="${esc(g.origin)}">${esc(g.origin)} · ${esc(t("allowed {0}", formatDate(g.granted_at)))} · <span class="mono">${esc(g.key_hint)}</span></div>
         </div>
-        <button class="btn danger" data-click="revokeGrant" data-id="${esc(g.id)}" data-name="${esc(g.name)}" ${running() ? "" : "disabled"}>Revoke</button>
+        <button class="btn danger" data-click="revokeGrant" data-id="${esc(g.id)}" data-name="${esc(g.name)}" ${running() ? "" : "disabled"}>${t("Revoke")}</button>
       </div>`,
         )
         .join("")
-    : `<div class="row"><div class="grow caption">No apps yet. When a web app asks for access, CLI Tollgate asks you first.</div></div>`;
-  return `<h2 class="section-title">Connected apps</h2><div class="card">${rows}</div>`;
+    : `<div class="row"><div class="grow caption">${t("No apps yet. When a web app asks for access, CLI Tollgate asks you first.")}</div></div>`;
+  return `<h2 class="section-title">${t("Connected apps")}</h2><div class="card">${rows}</div>`;
 }
 
 function renderHeader() {
   const status = $("#status");
   status.className = `status ${state.engine}`;
   const text = {
-    running: `Running on ${state.baseURL}`,
-    starting: "Starting…",
-    stopped: "Stopped",
-    failed: state.engineMessage || "The engine failed to start.",
+    running: t("Running on {0}", state.baseURL),
+    starting: t("Starting…"),
+    stopped: t("Stopped"),
+    failed: state.engineMessage || t("The engine failed to start."),
   }[state.engine];
   status.querySelector(".status-text").textContent = text;
   status.title = text;
-  const t = $("#engine-toggle");
-  t.checked = state.engine === "running" || state.engine === "starting";
+  const toggleEl = $("#engine-toggle");
+  toggleEl.checked = state.engine === "running" || state.engine === "starting";
   document.title = "CLI Tollgate";
 }
 
@@ -268,11 +270,11 @@ function bannersHTML() {
   let html = "";
   if (state.lastError) {
     html += `<div class="infobar error">${icon("warn")}<div class="msg">${esc(state.lastError)}</div>
-      <button class="icon-btn" data-click="dismissError" title="Dismiss" aria-label="Dismiss">${icon("close")}</button></div>`;
+      <button class="icon-btn" data-click="dismissError" title="${t("Dismiss")}" aria-label="${t("Dismiss")}">${icon("close")}</button></div>`;
   }
   if (state.update.available) {
-    html += `<div class="infobar info">${icon("info")}<div class="msg">CLI Tollgate ${esc(state.update.available)} is ready to install.</div>
-      <button class="btn small accent" data-click="installUpdate">Restart to update</button></div>`;
+    html += `<div class="infobar info">${icon("info")}<div class="msg">${esc(t("CLI Tollgate {0} is ready to install.", state.update.available))}</div>
+      <button class="btn small accent" data-click="installUpdate">${t("Restart to update")}</button></div>`;
   }
   return html;
 }
@@ -282,20 +284,20 @@ function overviewHTML() {
     .map((a) => {
       let actions;
       if (a.loggingIn) {
-        actions = `<span class="spinner" aria-label="Waiting for sign in"></span><button class="btn small" data-click="cancelLogin">Cancel</button>`;
+        actions = `<span class="spinner" aria-label="${t("Waiting for sign in")}"></span><button class="btn small" data-click="cancelLogin">${t("Cancel")}</button>`;
       } else if (a.signedIn) {
         const id = `menu-${a.provider}`;
         actions = `<div class="menu-anchor"><button class="icon-btn" data-click="menu" data-id="${id}" ${
           state.loginActive ? "disabled" : ""
-        } title="Account options" aria-label="Account options">${icon("more")}</button>${
+        } title="${t("Account options")}" aria-label="${t("Account options")}">${icon("more")}</button>${
           ui.menu === id
-            ? `<div class="menu"><button data-click="login" data-provider="${a.provider}">Switch account…</button><button class="danger" data-click="logout" data-provider="${a.provider}">Sign out</button></div>`
+            ? `<div class="menu"><button data-click="login" data-provider="${a.provider}">${t("Switch account…")}</button><button class="danger" data-click="logout" data-provider="${a.provider}">${t("Sign out")}</button></div>`
             : ""
         }</div>`;
       } else {
         actions = `<button class="btn small accent" data-click="login" data-provider="${a.provider}" ${
           !running() || state.loginActive ? "disabled" : ""
-        }>Sign in</button>`;
+        }>${t("Sign in")}</button>`;
       }
       return `<div class="row">
         <div class="tile">${icon(PROVIDER_ICON[a.provider])}</div>
@@ -313,43 +315,46 @@ function overviewHTML() {
   const snippet = snippets.find((s) => s.id === ui.snippet);
   const key = state.apiKey;
 
+  const revealLabel = ui.revealKey ? t("Hide API key") : t("Show API key");
   const connect = key
-    ? `<div class="kv"><div class="k">Base URL</div><div class="v mono truncate">${esc(state.baseURL)}</div>${copyButton(
+    ? `<div class="kv"><div class="k">${t("Base URL")}</div><div class="v mono truncate">${esc(state.baseURL)}</div>${copyButton(
         "copy-url",
         state.baseURL,
-        "base URL",
+        t("base URL"),
       )}</div>
-      <div class="kv"><div class="k">API key</div><div class="v mono truncate" title="Double-click to reveal" data-dblclick="reveal">${esc(
+      <div class="kv"><div class="k">${t("API key")}</div><div class="v mono truncate" title="${t("Double-click to reveal")}" data-dblclick="reveal">${esc(
         ui.revealKey ? key : masked(key),
       )}</div>
-        <button class="icon-btn" data-click="reveal" title="${ui.revealKey ? "Hide" : "Show"} API key" aria-label="${
-          ui.revealKey ? "Hide" : "Show"
-        } API key">${icon(ui.revealKey ? "eyeOff" : "eye")}</button>${copyButton("copy-key", key, "API key")}</div>
+        <button class="icon-btn" data-click="reveal" title="${revealLabel}" aria-label="${revealLabel}">${icon(
+          ui.revealKey ? "eyeOff" : "eye",
+        )}</button>${copyButton("copy-key", key, t("API key"))}</div>
       <div class="snippet">
         <div class="snippet-head">
-          <select class="select" data-change="snippet" aria-label="Setup snippet">${snippets
+          <select class="select" data-change="snippet" aria-label="${t("Setup snippet")}">${snippets
             .map((s) => `<option value="${esc(s.id)}" ${s.id === ui.snippet ? "selected" : ""}>${esc(s.title)}</option>`)
             .join("")}</select>
           <button class="btn" data-click="copy" data-id="copy-snippet" data-text="${esc(snippet?.text)}" data-label="${esc(
-            snippet?.title,
-          )} setup">${icon(ui.copied === "copy-snippet" ? "check" : "copy")}Copy</button>
+            t("{0} setup", snippet?.title),
+          )}">${icon(ui.copied === "copy-snippet" ? "check" : "copy")}${t("Copy")}</button>
         </div>
         <pre class="code">${esc(snippet?.text)}</pre>
       </div>`
     : `<div class="row"><div class="grow caption">${
-        state.engine === "running" ? "Loading…" : "Start the proxy to see the base URL and API key."
+        state.engine === "running" ? t("Loading…") : t("Start the proxy to see the base URL and API key.")
       }</div></div>`;
 
   const usage = state.usage
-    ? `<div class="usage" title="${state.usage.failures} failed requests today">${icon("chart")}${state.usage.requests} requests · ${formatTokens(
-        state.usage.tokens.total,
-      )} tokens today</div>`
+    ? `<div class="usage" title="${t("{0} failed requests today", state.usage.failures)}">${icon("chart")}${t(
+        "{0} requests · {1} tokens today",
+        state.usage.requests,
+        formatTokens(state.usage.tokens.total),
+      )}</div>`
     : "";
 
   return `
-    <h2 class="section-title">Accounts</h2>
+    <h2 class="section-title">${t("Accounts")}</h2>
     <div class="card">${accounts}</div>
-    <h2 class="section-title">Connect</h2>
+    <h2 class="section-title">${t("Connect")}</h2>
     <div class="card">${connect}</div>
     ${usage}`;
 }
@@ -368,19 +373,21 @@ function modelsHTML() {
 
   let list;
   if (!all.length) {
-    list = `<div class="empty">${icon("stack")}<div>${running() ? "No models in the catalog." : "Start the proxy to load models."}</div></div>`;
+    list = `<div class="empty">${icon("stack")}<div>${running() ? t("No models in the catalog.") : t("Start the proxy to load models.")}</div></div>`;
   } else if (!shown.length) {
-    list = `<div class="empty"><div>No models match “${esc(ui.filter)}”.</div></div>`;
+    list = `<div class="empty"><div>${esc(t("No models match “{0}”.", ui.filter))}</div></div>`;
   } else {
     list = `<div class="card">${shown
       .map((m) => {
-        const meta = [m.displayName, m.contextLength > 0 ? `${Math.round(m.contextLength / 1000)}k context` : ""].filter(Boolean).join(" · ");
+        const meta = [m.displayName, m.contextLength > 0 ? t("{0}k context", Math.round(m.contextLength / 1000)) : ""].filter(Boolean).join(" · ");
         return `<div class="model ${m.exposed ? "" : "hidden-model"}">
-          <input type="checkbox" class="check" data-change="exposed" data-model="${esc(m.id)}" ${m.exposed ? "checked" : ""} title="Expose this model to clients" aria-label="Expose ${esc(m.id)}">
+          <input type="checkbox" class="check" data-change="exposed" data-model="${esc(m.id)}" ${m.exposed ? "checked" : ""} title="${t("Expose this model to clients")}" aria-label="${esc(t("Expose {0}", m.id))}">
           <div class="grow"><div class="mono truncate" title="${esc(m.id)}">${esc(m.id)}</div>${
             meta ? `<div class="caption truncate">${esc(meta)}</div>` : ""
           }</div>
-          <input class="input small mono alias" data-alias="${esc(m.id)}" value="${esc(m.alias)}" placeholder="alias" spellcheck="false" title="Extra client-visible name. The original ID keeps working." aria-label="Alias for ${esc(m.id)}">
+          <input class="input small mono alias" data-alias="${esc(m.id)}" value="${esc(m.alias)}" placeholder="${t("alias")}" spellcheck="false" title="${t("Extra client-visible name. The original ID keeps working.")}" aria-label="${esc(
+            t("Alias for {0}", m.id),
+          )}">
         </div>`;
       })
       .join("")}</div>`;
@@ -388,15 +395,15 @@ function modelsHTML() {
 
   return `
     <div class="toolbar">
-      <div class="segmented" role="group" aria-label="Provider">${seg}</div>
-      <input class="input" id="filter" type="search" placeholder="Filter" value="${esc(ui.filter)}" spellcheck="false" aria-label="Filter models">
+      <div class="segmented" role="group" aria-label="${t("Provider")}">${seg}</div>
+      <input class="input" id="filter" type="search" placeholder="${t("Filter")}" value="${esc(ui.filter)}" spellcheck="false" aria-label="${t("Filter models")}">
     </div>
     <div class="list-head">
-      <span>${exposed} of ${all.length} exposed</span>
-      ${account && !account.signedIn ? `<span class="caption warn" title="Not signed in to ${esc(title)}">· not signed in</span>` : ""}
+      <span>${t("{0} of {1} exposed", exposed, all.length)}</span>
+      ${account && !account.signedIn ? `<span class="caption warn" title="${esc(t("Not signed in to {0}", title))}">${t("· not signed in")}</span>` : ""}
       <span class="grow"></span>
-      <button class="btn small" data-click="allExposed" data-on="false" ${all.length ? "" : "disabled"}>Hide all</button>
-      <button class="btn small" data-click="allExposed" data-on="true" ${all.length ? "" : "disabled"}>Show all</button>
+      <button class="btn small" data-click="allExposed" data-on="false" ${all.length ? "" : "disabled"}>${t("Hide all")}</button>
+      <button class="btn small" data-click="allExposed" data-on="true" ${all.length ? "" : "disabled"}>${t("Show all")}</button>
     </div>
     ${list}`;
 }
@@ -406,94 +413,98 @@ function settingsHTML() {
   const u = state.update;
   const port = ui.portDraft ?? String(state.port);
   const portValid = /^\d+$/.test(port) && +port >= 1024 && +port <= 65535;
-  const commit = state.engineCommit ? `CLIProxyAPI @ ${state.engineCommit.slice(0, 12)}` : "bundled";
+  const commit = state.engineCommit ? `CLIProxyAPI @ ${state.engineCommit.slice(0, 12)}` : t("bundled");
   const version = state.build ? `${state.version} (${state.build})` : state.version;
   const cloak = state.cloaking;
   const cloakCaption =
     cloak.claude && cloak.codex
-      ? "Claude models go out as Claude Code, GPT / Codex as Codex CLI."
+      ? t("Claude models go out as Claude Code, GPT / Codex as Codex CLI.")
       : !cloak.claude && !cloak.codex
-        ? "Requests keep the calling client's identity."
-        : "Partially on. Adjust each side below.";
+        ? t("Requests keep the calling client's identity.")
+        : t("Partially on. Adjust each side below.");
 
   return `
-    <h2 class="section-title">General</h2>
+    <h2 class="section-title">${t("General")}</h2>
     <div class="card">
-      <div class="row"><div class="grow label">Launch at sign-in</div>${toggle("lal", state.launchAtLogin, "setLaunchAtLogin", { label: "Launch at sign-in" })}</div>
+      <div class="row"><div class="grow label">${t("Launch at sign-in")}</div>${toggle("lal", state.launchAtLogin, "setLaunchAtLogin", { label: t("Launch at sign-in") })}</div>
     </div>
 
-    <h2 class="section-title">Proxy</h2>
+    <h2 class="section-title">${t("Proxy")}</h2>
     <div class="card">
       <div class="row">
-        <div class="grow label">Port</div>
+        <div class="grow label">${t("Port")}</div>
         <div class="inline">
-          <input class="input port-input" id="port" inputmode="numeric" value="${esc(port)}" aria-label="Port">
-          <button class="btn" data-click="applyPort" ${!portValid || +port === state.port || !running() ? "disabled" : ""}>Apply</button>
+          <input class="input port-input" id="port" inputmode="numeric" value="${esc(port)}" aria-label="${t("Port")}">
+          <button class="btn" data-click="applyPort" ${!portValid || +port === state.port || !running() ? "disabled" : ""}>${t("Apply")}</button>
         </div>
       </div>
-      <div class="row"><div class="grow label">Listens on</div><span class="caption">127.0.0.1 only</span></div>
-      <div class="row"><div class="grow label">API key</div><button class="btn" data-click="regenerate" ${running() ? "" : "disabled"}>Regenerate…</button></div>
+      <div class="row"><div class="grow label">${t("Listens on")}</div><span class="caption">${t("127.0.0.1 only")}</span></div>
+      <div class="row"><div class="grow label">${t("API key")}</div><button class="btn" data-click="regenerate" ${running() ? "" : "disabled"}>${t("Regenerate…")}</button></div>
     </div>
-    <p class="footnote">Web pages can call the proxy (CORS is open), but every request needs the API key.</p>
+    <p class="footnote">${t("Web pages can call the proxy (CORS is open), but every request needs the API key.")}</p>
 
     ${grantsHTML()}
-    <p class="footnote">Revoking an app turns off its key right away. Regenerating your API key leaves connected apps working.</p>
+    <p class="footnote">${t("Revoking an app turns off its key right away. Regenerating your API key leaves connected apps working.")}</p>
 
-    <h2 class="section-title">Updates</h2>
+    <h2 class="section-title">${t("Updates")}</h2>
     <div class="card">
-      <div class="row"><div class="grow label">Check for updates automatically</div>${toggle("u1", s.autoCheckUpdates, "setAutoCheckUpdates", {
+      <div class="row"><div class="grow label">${t("Check for updates automatically")}</div>${toggle("u1", s.autoCheckUpdates, "setAutoCheckUpdates", {
         disabled: !u.supported,
-        label: "Check for updates automatically",
+        label: t("Check for updates automatically"),
       })}</div>
-      <div class="row"><div class="grow"><div class="label">Install updates when I quit</div><div class="caption">Downloaded updates are verified with an Ed25519 signature.</div></div>${toggle(
+      <div class="row"><div class="grow"><div class="label">${t("Install updates when I quit")}</div><div class="caption">${t(
+        "Downloaded updates are verified with an Ed25519 signature.",
+      )}</div></div>${toggle(
         "u2",
         s.autoInstallUpdates,
         "setAutoInstallUpdates",
-        { disabled: !u.supported || !s.autoCheckUpdates, label: "Install updates when I quit" },
+        { disabled: !u.supported || !s.autoCheckUpdates, label: t("Install updates when I quit") },
       )}</div>
       <div class="row">
-        <div class="grow caption">${esc(u.message || (u.supported ? "" : "Updates are only available in released builds."))}</div>
+        <div class="grow caption">${esc(u.message || (u.supported ? "" : t("Updates are only available in released builds.")))}</div>
         ${u.checking ? `<span class="spinner"></span>` : ""}
         ${
           u.available
-            ? `<button class="btn accent" data-click="installUpdate">Install ${esc(u.available)}</button>`
-            : `<button class="btn" data-click="checkForUpdates" ${u.supported && !u.checking ? "" : "disabled"}>Check now</button>`
+            ? `<button class="btn accent" data-click="installUpdate">${esc(t("Install {0}", u.available))}</button>`
+            : `<button class="btn" data-click="checkForUpdates" ${u.supported && !u.checking ? "" : "disabled"}>${t("Check now")}</button>`
         }
       </div>
     </div>
 
-    <h2 class="section-title">Advanced: Cloaking</h2>
+    <h2 class="section-title">${t("Advanced: Cloaking")}</h2>
     <div class="card">
       <div class="row">
-        <div class="grow"><div class="label">Cloak requests</div><div class="caption">${esc(cloakCaption)}</div></div>
-        ${toggle("cloak", cloak.claude && cloak.codex, "setCloaking", { disabled: !running(), label: "Cloak requests" })}
+        <div class="grow"><div class="label">${t("Cloak requests")}</div><div class="caption">${esc(cloakCaption)}</div></div>
+        ${toggle("cloak", cloak.claude && cloak.codex, "setCloaking", { disabled: !running(), label: t("Cloak requests") })}
       </div>
-      <div class="row"><div class="grow label">Disguise Claude requests as Claude Code</div>${toggle("c1", state.cloaking.claude, "setClaudeCloaking", {
+      <div class="row"><div class="grow label">${t("Disguise Claude requests as Claude Code")}</div>${toggle("c1", state.cloaking.claude, "setClaudeCloaking", {
         disabled: !running(),
-        label: "Disguise Claude requests as Claude Code",
+        label: t("Disguise Claude requests as Claude Code"),
       })}</div>
-      <div class="row"><div class="grow label">Send official Codex CLI headers for GPT / Codex</div>${toggle("c2", state.cloaking.codex, "setCodexCloaking", {
+      <div class="row"><div class="grow label">${t("Send official Codex CLI headers for GPT / Codex")}</div>${toggle("c2", state.cloaking.codex, "setCodexCloaking", {
         disabled: !running(),
-        label: "Send official Codex CLI headers",
+        label: t("Send official Codex CLI headers"),
       })}</div>
-      <div class="row"><div class="grow label">Cloak Claude model IDs in <span class="mono">/v1/models</span></div>${toggle(
+      <div class="row"><div class="grow label">${t("Cloak Claude model IDs in {0}", `<span class="mono">/v1/models</span>`)}</div>${toggle(
         "c3",
         state.cloaking.claudeModelList,
         "setClaudeCloakModelList",
-        { disabled: !running(), label: "Cloak Claude model IDs" },
+        { disabled: !running(), label: t("Cloak Claude model IDs") },
       )}</div>
     </div>
-    <p class="footnote">The disguise follows the requested model. Requests that already come from Claude Code are passed through unchanged.</p>
+    <p class="footnote">${t("The disguise follows the requested model. Requests that already come from Claude Code are passed through unchanged.")}</p>
 
-    <h2 class="section-title">About</h2>
+    <h2 class="section-title">${t("About")}</h2>
     <div class="card">
-      <div class="row"><div class="grow label">Version</div><span class="caption">${esc(version)}</span></div>
-      <div class="row"><div class="grow label">Engine</div><span class="caption mono">${esc(commit)}</span></div>
-      <div class="row"><div class="grow"><div class="label">Data folder</div><div class="caption truncate" title="${esc(state.dataDir)}">${esc(
+      <div class="row"><div class="grow label">${t("Version")}</div><span class="caption">${esc(version)}</span></div>
+      <div class="row"><div class="grow label">${t("Engine")}</div><span class="caption mono">${esc(commit)}</span></div>
+      <div class="row"><div class="grow"><div class="label">${t("Data folder")}</div><div class="caption truncate" title="${esc(state.dataDir)}">${esc(
         state.dataDir,
-      )}</div></div><button class="btn" data-click="openDataFolder">Open</button></div>
-      <div class="row"><div class="grow label">Engine log</div><button class="btn" data-click="openLogs">Open</button><button class="btn" data-click="restartEngine">Restart engine</button></div>
-      <div class="row"><div class="grow label">Quit CLI Tollgate</div><button class="btn danger" data-click="quit">Quit</button></div>
+      )}</div></div><button class="btn" data-click="openDataFolder">${t("Open")}</button></div>
+      <div class="row"><div class="grow label">${t("Engine log")}</div><button class="btn" data-click="openLogs">${t("Open")}</button><button class="btn" data-click="restartEngine">${t(
+        "Restart engine",
+      )}</button></div>
+      <div class="row"><div class="grow label">${t("Quit CLI Tollgate")}</div><button class="btn danger" data-click="quit">${t("Quit")}</button></div>
     </div>`;
 }
 
@@ -504,7 +515,7 @@ function confirmDialog({ title, message, confirm, danger }) {
     const modal = $("#modal");
     modal.innerHTML = `<div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dlg-title">
       <div class="body"><h2 id="dlg-title">${esc(title)}</h2><p>${esc(message)}</p></div>
-      <div class="actions"><button class="btn accent ${danger ? "danger-accent" : ""}" data-r="1">${esc(confirm)}</button><button class="btn" data-r="0">Cancel</button></div>
+      <div class="actions"><button class="btn accent ${danger ? "danger-accent" : ""}" data-r="1">${esc(confirm)}</button><button class="btn" data-r="0">${t("Cancel")}</button></div>
     </div>`;
     modal.hidden = false;
     const done = (v) => {
@@ -535,7 +546,7 @@ const clicks = {
   async copy(el) {
     await call("copy", { text: el.dataset.text });
     flashCopied(el.dataset.id);
-    if (el.dataset.label) toast(`Copied ${el.dataset.label}`);
+    if (el.dataset.label) toast(t("Copied {0}", el.dataset.label));
   },
   reveal() {
     ui.revealKey = !ui.revealKey;
@@ -573,12 +584,12 @@ const clicks = {
     if (!port) return;
     if (await call("setPort", { port })) {
       ui.portDraft = null;
-      toast(`Restarting on port ${port}…`);
+      toast(t("Restarting on port {0}…", port));
     }
   },
   async allowAccess(el) {
     el.closest(".actions").querySelectorAll("button").forEach((b) => (b.disabled = true));
-    if (await call("allowAccess", { id: el.dataset.id })) toast(`Allowed ${el.dataset.name}`);
+    if (await call("allowAccess", { id: el.dataset.id })) toast(t("Allowed {0}", el.dataset.name));
   },
   async denyAccess(el) {
     el.closest(".actions").querySelectorAll("button").forEach((b) => (b.disabled = true));
@@ -586,21 +597,21 @@ const clicks = {
   },
   async revokeGrant(el) {
     const ok = await confirmDialog({
-      title: `Revoke access for “${el.dataset.name}”?`,
-      message: "Its key stops working right away. It can ask for access again later.",
-      confirm: "Revoke",
+      title: t("Revoke access for “{0}”?", el.dataset.name),
+      message: t("Its key stops working right away. It can ask for access again later."),
+      confirm: t("Revoke"),
       danger: true,
     });
-    if (ok && (await call("revokeGrant", { id: el.dataset.id }))) toast("Access revoked");
+    if (ok && (await call("revokeGrant", { id: el.dataset.id }))) toast(t("Access revoked"));
   },
   async regenerate() {
     const ok = await confirmDialog({
-      title: "Regenerate the API key?",
-      message: "Clients using the current key will stop working until you update them. Connected apps keep their own keys.",
-      confirm: "Regenerate",
+      title: t("Regenerate the API key?"),
+      message: t("Clients using the current key will stop working until you update them. Connected apps keep their own keys."),
+      confirm: t("Regenerate"),
       danger: true,
     });
-    if (ok && (await call("regenerateAPIKey"))) toast("New API key created");
+    if (ok && (await call("regenerateAPIKey"))) toast(t("New API key created"));
   },
 };
 
@@ -697,6 +708,7 @@ window.tollgateShow = (tab) => {
   if (tab) location.hash = tab;
 };
 
+translateStatic();
 selectTab(location.hash.slice(1) || "overview");
 call("refresh");
 poll();

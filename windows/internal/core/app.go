@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/dylancetin/cli-tollgate/windows/internal/i18n"
 )
 
 // Provider is one subscription the app signs in to.
@@ -32,9 +34,9 @@ func (p Provider) Title() string {
 
 func (p Provider) Subtitle() string {
 	if p == Codex {
-		return "Plus / Pro subscription via Codex"
+		return i18n.T("Plus / Pro subscription via Codex")
 	}
-	return "Pro / Max subscription"
+	return i18n.T("Pro / Max subscription")
 }
 
 func ParseProvider(s string) (Provider, error) {
@@ -299,15 +301,15 @@ func (a *App) accountViewLocked(p Provider) AccountView {
 	}
 	switch {
 	case v.LoggingIn:
-		v.Detail = "Finish signing in in your browser…"
+		v.Detail = i18n.T("Finish signing in in your browser…")
 	case c == nil:
 		v.Detail = p.Subtitle()
 	case c.Disabled:
-		v.Detail, v.Warning = "Disabled", true
+		v.Detail, v.Warning = i18n.T("Disabled"), true
 	case c.Unavailable:
 		v.Detail, v.Warning = c.StatusMessage, true
 		if v.Detail == "" {
-			v.Detail = "Cooling down (rate limited)"
+			v.Detail = i18n.T("Cooling down (rate limited)")
 		}
 	default:
 		v.Detail = c.DisplayName()
@@ -507,7 +509,7 @@ func (a *App) login(p Provider) error {
 	a.loginState = start.State
 	a.mu.Unlock()
 	if err := a.Platform.OpenURL(start.URL); err != nil {
-		return fmt.Errorf("could not open the browser: %w", err)
+		return fmt.Errorf(i18n.T("could not open the browser: %w"), err)
 	}
 
 	deadline := time.Now().Add(5 * time.Minute)
@@ -520,7 +522,7 @@ func (a *App) login(p Provider) error {
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return errors.New("Login timed out.")
+			return errors.New(i18n.T("Login timed out."))
 		}
 		var status authStatusResponse
 		if err := c.Get(ctx, "/v8/management/oauth/status", url.Values{"state": {start.State}}, &status); err != nil {
@@ -531,7 +533,7 @@ func (a *App) login(p Provider) error {
 		}
 		if status.Status == "error" {
 			if status.Error == "" {
-				status.Error = "Login failed."
+				status.Error = i18n.T("Login failed.")
 			}
 			return errors.New(status.Error)
 		}
@@ -762,7 +764,7 @@ func (a *App) RegenerateAPIKey() error {
 func (a *App) ChangePort(port int) error {
 	_, _, current := a.Engine.State()
 	if port < 1024 || port > 65535 {
-		return fmt.Errorf("port must be between 1024 and 65535")
+		return errors.New(i18n.T("port must be between 1024 and 65535"))
 	}
 	if port == current {
 		return nil
@@ -838,6 +840,6 @@ func (a *App) DismissError() {
 // Copy puts text on the clipboard, reporting failures in the banner.
 func (a *App) Copy(text string) {
 	if err := a.Platform.CopyText(text); err != nil {
-		a.report(fmt.Errorf("copy failed: %w", err))
+		a.report(fmt.Errorf(i18n.T("copy failed: %w"), err))
 	}
 }

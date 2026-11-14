@@ -89,7 +89,7 @@ final class EngineController {
 
     private func launch() throws {
         guard let binary = Paths.engineBinary else {
-            throw EngineError("The proxy engine is missing from the app bundle.")
+            throw EngineError(String(localized: "The proxy engine is missing from the app bundle."))
         }
         rotateLogIfNeeded()
         FileManager.default.createFile(atPath: Paths.engineLog.path, contents: nil)
@@ -129,7 +129,8 @@ final class EngineController {
                 try? await Task.sleep(nanoseconds: 250_000_000)
             }
             if self?.state == .starting {
-                self?.state = .failed("The engine did not answer on port \(self?.port ?? 0). \(Self.lastLogLine())")
+                let port = self?.port ?? 0
+                self?.state = .failed(String(localized: "The engine did not answer on port \(port). \(Self.lastLogLine())"))
             }
         }
     }
@@ -147,7 +148,7 @@ final class EngineController {
         let now = Date()
         recentCrashes = recentCrashes.filter { now.timeIntervalSince($0) < 60 } + [now]
         if recentCrashes.count >= 3 {
-            state = .failed("The engine exited (status \(status)). \(Self.lastLogLine())")
+            state = .failed(String(localized: "The engine exited (status \(Int(status))). \(Self.lastLogLine())"))
             return
         }
         state = .starting

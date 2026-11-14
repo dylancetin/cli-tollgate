@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/url"
 	"time"
+
+	"github.com/dylancetin/cli-tollgate/windows/internal/i18n"
 )
 
 // Web apps ask for access by generating their own key and calling the
@@ -137,7 +139,7 @@ func (a *App) AnswerAccessRequest(id string, allow bool) error {
 	a.mu.Unlock()
 	a.notify()
 	if isNotFound(err) {
-		return errors.New("This request has expired or was already answered.")
+		return errors.New(i18n.T("This request has expired or was already answered."))
 	}
 	if err != nil {
 		return err

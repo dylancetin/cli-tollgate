@@ -1,4 +1,4 @@
-; Inno Setup 6 script for CLI Tollgate (per-user install, no admin rights).
+﻿; Inno Setup 6 script for CLI Tollgate (per-user install, no admin rights).
 ; Build: iscc /DAppVersion=0.1.0 /DAppBuild=42 /DNumericVersion=0.1.0.42 /DSourceDir=..\..\build\windows /DOutputDir=..\..\dist windows\installer\CLITollgate.iss
 ;
 ; Silent update (used by the app): Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- [/RELAUNCH=1]
@@ -51,13 +51,24 @@ Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
 CloseApplications=no
+ShowLanguageDialog=no
 RestartApplications=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "turkish"; MessagesFile: "compiler:Languages\Turkish.isl"
+
+; Setup follows the Windows display language without asking.
+[CustomMessages]
+english.AutostartTask=Start {#AppName} when I sign in to Windows
+turkish.AutostartTask=Windows'ta oturum açtığımda {#AppName} uygulamasını başlat
+english.OptionsGroup=Options:
+turkish.OptionsGroup=Seçenekler:
+english.AppRunning={#AppName} is running. Setup will close it and continue.
+turkish.AppRunning={#AppName} çalışıyor. Kurulum onu kapatıp devam edecek.
 
 [Tasks]
-Name: "autostart"; Description: "Start {#AppName} when I sign in to Windows"; GroupDescription: "Options:"
+Name: "autostart"; Description: "{cm:AutostartTask}"; GroupDescription: "{cm:OptionsGroup}"
 
 [Files]
 Source: "{#SourceDir}\{#AppExe}"; DestDir: "{app}"; Flags: ignoreversion
@@ -74,7 +85,7 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "{#AppName}"; Flags: uninsdeletevalue dontcreatekey
 
 [Run]
-Filename: "{app}\{#AppExe}"; Description: "Launch {#AppName}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
 ; Silent updates started by the app ask to be relaunched.
 Filename: "{app}\{#AppExe}"; Flags: nowait; Check: ShouldRelaunch
 
@@ -105,7 +116,7 @@ begin
   if CheckForMutexes('{#AppMutex}') then
   begin
     if not WizardSilent then
-      if MsgBox('{#AppName} is running. Setup will close it and continue.', mbConfirmation, MB_OKCANCEL) <> IDOK then
+      if MsgBox(CustomMessage('AppRunning'), mbConfirmation, MB_OKCANCEL) <> IDOK then
       begin
         Result := False;
         Exit;

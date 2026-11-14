@@ -13,18 +13,18 @@
     <img class="app-icon" src="icon.png" alt="" width="36" height="36">
     <div class="title-text">
       <h1>CLI Tollgate</h1>
-      <div class="status" id="status"><span class="dot"></span><span class="status-text">Connecting…</span></div>
+      <div class="status" id="status"><span class="dot"></span><span class="status-text" data-i18n>Connecting…</span></div>
     </div>
-    <label class="switch" title="Start or stop the local proxy">
-      <input type="checkbox" id="engine-toggle" data-change="setEngine" aria-label="Proxy running">
+    <label class="switch" title="Start or stop the local proxy" data-i18n-title>
+      <input type="checkbox" id="engine-toggle" data-change="setEngine" aria-label="Proxy running" data-i18n-aria-label>
       <span class="track"><span class="knob"></span></span>
     </label>
   </header>
 
   <nav class="pivot" role="tablist">
-    <a href="#overview" role="tab" data-tab="overview">Overview</a>
-    <a href="#models" role="tab" data-tab="models">Models</a>
-    <a href="#settings" role="tab" data-tab="settings">Settings</a>
+    <a href="#overview" role="tab" data-tab="overview" data-i18n>Overview</a>
+    <a href="#models" role="tab" data-tab="models" data-i18n>Models</a>
+    <a href="#settings" role="tab" data-tab="settings" data-i18n>Settings</a>
   </nav>
 
   <main>
@@ -38,6 +38,8 @@
   <div class="modal-backdrop" id="modal" hidden></div>
   <div class="modal-backdrop" id="access" hidden></div>
 
+  <script src="lang.js"></script>
+  <script src="i18n.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

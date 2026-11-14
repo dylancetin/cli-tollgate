@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/dylancetin/cli-tollgate/windows/internal/i18n"
 )
 
 // EngineState is the lifecycle of the bundled engine process.
@@ -154,7 +156,7 @@ func (e *Engine) StopAndWait(timeout time.Duration) {
 
 func (e *Engine) launchLocked() error {
 	if _, err := os.Stat(e.paths.Engine); err != nil {
-		return fmt.Errorf("the proxy engine is missing (%s)", e.paths.Engine)
+		return fmt.Errorf(i18n.T("the proxy engine is missing (%s)"), e.paths.Engine)
 	}
 	rotateLog(e.paths)
 	log, err := os.OpenFile(e.paths.EngineLog(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
@@ -212,7 +214,7 @@ func (e *Engine) waitUntilHealthy(gen int, client Management) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.generation == gen && e.state == EngineStarting {
-		e.setState(EngineFailed, strings.TrimSpace(fmt.Sprintf("The engine did not answer on port %d. %s", e.port, LastLogLine(e.paths))))
+		e.setState(EngineFailed, strings.TrimSpace(i18n.F("The engine did not answer on port %d. %s", e.port, LastLogLine(e.paths))))
 	}
 }
 
@@ -231,10 +233,10 @@ func (e *Engine) handleExit(proc *engineProc, err error) {
 		}
 		return
 	}
-	status := "exited"
+	failure := i18n.F("The engine exited. %s", LastLogLine(e.paths))
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
-		status = fmt.Sprintf("exited (status %d)", exitErr.ExitCode())
+		failure = i18n.F("The engine exited (status %d). %s", exitErr.ExitCode(), LastLogLine(e.paths))
 	}
 	// Restart on crash, but give up after 3 crashes within a minute.
 	now := time.Now()
@@ -246,7 +248,7 @@ func (e *Engine) handleExit(proc *engineProc, err error) {
 	}
 	e.crashes = append(recent, now)
 	if len(e.crashes) >= 3 {
-		e.setState(EngineFailed, strings.TrimSpace("The engine "+status+". "+LastLogLine(e.paths)))
+		e.setState(EngineFailed, strings.TrimSpace(failure))
 		return
 	}
 	e.setState(EngineStarting, "")
