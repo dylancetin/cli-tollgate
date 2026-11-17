@@ -27,6 +27,9 @@ and your config never leave your computer.
   are cloaked in `/v1/models`.
 - **Web pages can call it**: binds to loopback only and CORS is open, so browser apps can use it.
   Every request still needs the API key.
+- **Web search and page reading for connected apps**: an app you allow with the `web` scope can
+  search the web (Brave Search, Tavily or Exa, with your own API key) and read pages through
+  this computer. Set it up under **Settings → Web access**.
 - **Copy setup** for Claude Code, Codex CLI, OpenAI-compatible SDKs, `fetch()` and `curl`.
 - **Today's usage** (requests and tokens) in the menu, from the engine's usage tracker.
 - **Launch at login**, port setting, API-key rotation, logs, crash auto-restart.
@@ -41,22 +44,60 @@ and your config never leave your computer.
 A web app doesn't need the user to copy and paste a key. It can ask for one:
 
 1. The page generates a random key (32+ characters of `A-Z a-z 0-9 - _ .`) and sends
-   `POST http://127.0.0.1:8317/access/requests` with `{"name": "My App", "key": "<key>"}`.
-   The response is `202 {"id": "…", "status": "pending"}`.
-2. CLI Tollgate shows **Allow “My App” to use your subscriptions?** with the page's origin.
-   Deny is the default button.
+   `POST http://127.0.0.1:8317/access/requests` with
+   `{"name": "My App", "key": "<key>", "scopes": ["models", "web"]}`.
+   The response is `202 {"id": "…", "status": "pending", "scopes": [...]}`.
+2. CLI Tollgate shows **Allow “My App” to use your subscriptions?** with the page's origin
+   (**…and search the web?** when `web` is asked for). Deny is the default button.
 3. The page polls `GET /access/requests/<id>?wait=50` (each call waits up to 55 s) until the status is
-   `approved`, `denied` or `expired`. Once it's approved, the page uses its key as a normal API key.
+   `approved`, `denied` or `expired`. Once it's approved (the response then lists the granted
+   `scopes`), the page uses its key as a normal API key.
 
-Allowed apps are listed under **Settings → Connected apps**, where you can revoke them. Revoking an app
-turns its key off right away. Regenerating your own API key doesn't affect connected apps.
-A ready-to-copy `requestTollgateAccess()` helper and a demo page are in
-[`examples/web-app/index.html`](examples/web-app/index.html).
+Scopes say what the app may do. `models` (chat, responses, messages, models: everything `/v1` served
+before scopes existed) is always granted. `web` unlocks the web tools below. Requests without `scopes`
+mean `["models"]`, and so do apps allowed before scopes existed. Your own API key has every scope.
+
+An app that already has a key can ask for more scopes **for the same key**: it sends the same
+`POST /access/requests` with that key and the larger `scopes`, from the same origin. CLI Tollgate asks
+**Let “My App” also search the web?**, and approving updates the existing connection (no new key).
+Refusals carry a machine-readable `code`: `scopes_already_granted`, `key_owned_by_other_app`,
+`key_already_allowed` (one of your own keys), `unknown_scope`.
+
+Allowed apps are listed under **Settings → Connected apps** (with a **Web** badge when they have the
+`web` scope), where you can revoke them. Revoking an app turns its key off right away. Regenerating
+your own API key doesn't affect connected apps. A ready-to-copy `requestTollgateAccess()` helper and a
+demo page are in [`examples/web-app/index.html`](examples/web-app/index.html).
 
 Safeguards: requests are only accepted from this computer, and only while the app is running to answer
 them. There is one pending request per origin, and an origin has to wait 30 s after a denial before it
 can ask again. Requests expire after 5 minutes. The key never comes back from the server, and
-`access-grants.json` keeps only key hashes.
+`access-grants.json` keeps only key hashes (and each app's scopes).
+
+### Web tools
+
+Browsers can't read other sites, so an app with the `web` scope can ask CLI Tollgate to do it. All
+three routes take the app's key as `Authorization: Bearer <key>`. The full contract is in
+[`docs/web-tools.md`](docs/web-tools.md).
+
+- `GET /v1/tools`: what this key may use. It always answers 200 for a valid key, with the key's
+  `scopes` and, per tool, `available` or a `reason` (`scope_required`, `disabled`, `not_configured`).
+- `POST /v1/tools/web_search` `{"query", "count", "freshness", "site", "lang", "provider"}`:
+  results from Brave Search, Tavily or Exa as `{title, url, snippet, published, site}`.
+- `POST /v1/tools/web_fetch` `{"url", "maxChars", "offset", "find"}`: the page's main content as
+  Markdown, in windows of up to 20,000 characters (`nextOffset` continues, `find` jumps to a phrase).
+
+**Settings → Web access** turns the tools on or off, holds one API key per search provider
+([Brave Search](https://brave.com/search/api/), [Tavily](https://app.tavily.com/),
+[Exa](https://dashboard.exa.ai/api-keys)) and the default one, and a list of sites to block (or the
+only sites to allow). Reading pages needs no API key.
+
+Safeguards: pages are fetched over `https` on port 443 only, with no cookies, directly (never through a
+proxy), and never from private, loopback or link-local addresses. That check runs on the address
+actually connected, so DNS tricks can't get around it. At most 3 redirects are followed, each one
+checked again. A fetch gets 10 seconds and 5 MB, and only HTML, plain text and Markdown are read.
+Each key gets 20 searches and 40 fetches a minute, and 4 calls at a time. Logs record only the host
+and the outcome, never the query, the full URL or the page text. Sites see your IP address, as they
+would if you opened the page yourself.
 
 ## Install
 
@@ -144,7 +185,7 @@ the printed URL in a browser:
 
 ```sh
 scripts/build-engine.sh linux
-cd windows && TOLLGATE_DATA_DIR=/tmp/tollgate TOLLGATE_ENGINE=../build/engine/linux/tollgate-engine \
+cd windows && TOLLGATE_DATA_DIR=/tmp/tollgate TOLLGATE_ENGINE="$PWD/../build/engine/linux/tollgate-engine" \
   go run . --ui-addr 127.0.0.1:8399
 ```
 

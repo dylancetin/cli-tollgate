@@ -76,6 +76,20 @@
 "Revoke" = "Erişimi Kaldır";
 "Its key stops working right away. It can ask for access again later." = "Anahtarı hemen çalışmayı durdurur. Daha sonra yeniden erişim isteyebilir.";
 
+/* Web access */
+"Web" = "Web";
+"Web access" = "Web erişimi";
+"Let connected apps search and read the web" = "Bağlı uygulamaların web'de arama yapıp sayfaları okumasına izin ver";
+"Get a key" = "Anahtar al";
+"Default search" = "Varsayılan arama";
+"Add an API key to enable search. Reading pages works without one." = "Aramayı etkinleştirmek için bir API anahtarı ekleyin. Sayfaları okumak anahtarsız da çalışır.";
+"Site list" = "Site listesi";
+"Block listed sites" = "Listedeki siteleri engelle";
+"Allow only listed sites" = "Yalnızca listedeki sitelere izin ver";
+"One site per line, e.g. example.com" = "Her satıra bir site, örn. example.com";
+"Save" = "Kaydet";
+"Searches and page reads go out from this computer, so sites see your IP address. A site entry also covers its subdomains." = "Aramalar ve sayfa okumaları bu bilgisayardan yapılır, bu yüzden siteler IP adresinizi görür. Bir site girdisi alt alan adlarını da kapsar.";
+
 /* Models window */
 "Provider" = "Sağlayıcı";
 "Filter" = "Filtrele";
@@ -92,6 +106,10 @@
 
 /* Access requests */
 "Allow “%@” to use your subscriptions?" = "“%@” aboneliklerinizi kullanabilsin mi?";
+"Allow “%@” to use your subscriptions and search the web?" = "“%@” aboneliklerinizi kullanabilsin ve web'de arama yapabilsin mi?";
+"Let “%@” also search the web?" = "“%@” web'de de arama yapabilsin mi?";
+"This app is already connected to CLI Tollgate. It is asking for more access." = "Bu uygulama CLI Tollgate'e zaten bağlı. Daha fazla erişim istiyor.";
+"It will also be able to search the web and read web pages through this computer. Sites see your IP address." = "Bu bilgisayar üzerinden web'de arama yapıp sayfaları okuyabilecek. Siteler IP adresinizi görür.";
 "It will be able to send requests through your signed-in ChatGPT and Claude accounts. You can revoke access anytime in Settings." = "Giriş yaptığınız ChatGPT ve Claude hesaplarınız üzerinden istek gönderebilecek. Erişimi istediğiniz zaman Ayarlar'dan kaldırabilirsiniz.";
 "Deny" = "Reddet";
 "Allow" = "İzin Ver";

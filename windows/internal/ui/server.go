@@ -174,6 +174,8 @@ type actionBody struct {
 	Text     string `json:"text"`
 	Tab      string `json:"tab"`
 	ID       string `json:"id"`
+
+	WebTools *core.WebTools `json:"webTools"`
 }
 
 func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
@@ -245,6 +247,11 @@ func (s *Server) dispatch(action string, b actionBody) error {
 		a.SetClaudeCloakModelList(b.On)
 	case "setCodexCloaking":
 		a.SetCodexCloaking(b.On)
+	case "setWebTools":
+		if b.WebTools == nil {
+			return errors.New("missing web access settings")
+		}
+		a.SetWebTools(*b.WebTools)
 	case "allowAccess":
 		return a.AnswerAccessRequest(b.ID, true)
 	case "denyAccess":

@@ -73,6 +73,7 @@ type App struct {
 	claudeList bool
 	codexOn    bool
 	usage      *Usage
+	webTools   WebTools
 
 	accessRequests []AccessRequest
 	grants         []AccessGrant
@@ -99,6 +100,7 @@ func NewApp(p Paths, platform Platform, version string, build int) *App {
 		claudeOn:     true,
 		claudeList:   true,
 		codexOn:      true,
+		webTools:     DefaultWebTools(),
 		changed:      make(chan struct{}),
 	}
 	a.Updater = NewUpdater(a)
@@ -227,6 +229,7 @@ type State struct {
 		ClaudeModelList bool `json:"claudeModelList"`
 		Codex           bool `json:"codex"`
 	} `json:"cloaking"`
+	WebTools       WebTools        `json:"webTools"`
 	Usage          *Usage          `json:"usage,omitempty"`
 	AccessRequests []AccessRequest `json:"accessRequests"`
 	Grants         []AccessGrant   `json:"grants"`
@@ -258,6 +261,7 @@ func (a *App) Snapshot() State {
 		LoginActive:    a.loginOf != "",
 		LastError:      a.lastError,
 		Models:         map[string][]ModelView{},
+		WebTools:       a.webTools,
 		Usage:          a.usage,
 		AccessRequests: append([]AccessRequest{}, a.accessRequests...),
 		Grants:         append([]AccessGrant{}, a.grants...),
@@ -401,6 +405,13 @@ func (a *App) RefreshSettings() {
 	} else if ok {
 		a.mu.Lock()
 		a.codexOn = codex.DisableCloaking == nil || !*codex.DisableCloaking
+		a.mu.Unlock()
+	}
+	if w, err := loadWebTools(ctx, c); err != nil {
+		a.report(err)
+	} else {
+		a.mu.Lock()
+		a.webTools = w
 		a.mu.Unlock()
 	}
 	a.notify()

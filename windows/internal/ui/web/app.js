@@ -150,7 +150,7 @@ function setRegion(el, html) {
   if (lastHTML[el.id] === html) return;
   // Don't yank a field out from under the user; re-render once they leave it.
   const active = document.activeElement;
-  if (active && el.contains(active) && (active.tagName === "INPUT" || active.tagName === "SELECT") && active.type !== "checkbox") {
+  if (active && el.contains(active) && (active.tagName === "INPUT" || active.tagName === "SELECT" || active.tagName === "TEXTAREA") && active.type !== "checkbox") {
     el.dataset.stale = "1";
     return;
   }
@@ -184,6 +184,26 @@ function originNote(origin) {
   return null;
 }
 
+// Title and body for a request. Fields that older engines do not send mean
+// "models only, not an upgrade".
+function accessPrompt(req) {
+  const scopes = req.scopes || ["models"];
+  const added = req.added_scopes || [];
+  if (req.upgrade && added.includes("web")) {
+    return {
+      title: t("Let “{0}” also search the web?", req.name),
+      body: t("This app is already connected to CLI Tollgate. It is asking for more access."),
+      web: true,
+    };
+  }
+  const web = !req.upgrade && scopes.includes("web");
+  return {
+    title: web ? t("Allow “{0}” to use your subscriptions and search the web?", req.name) : t("Allow “{0}” to use your subscriptions?", req.name),
+    body: t("It will be able to send requests through your signed-in ChatGPT and Claude accounts. You can revoke access anytime in Settings."),
+    web,
+  };
+}
+
 // A pending request takes over the window until it is answered.
 function renderAccess() {
   const el = $("#access");
@@ -198,15 +218,17 @@ function renderAccess() {
     return;
   }
   const note = originNote(req.origin);
+  const prompt = accessPrompt(req);
   const waiting = reqs.length - 1;
   const more = waiting > 0 ? `<p class="caption">${waiting === 1 ? t("1 more request waiting.") : t("{0} more requests waiting.", waiting)}</p>` : "";
   const html = `<div class="dialog access-dialog" role="alertdialog" aria-modal="true" aria-labelledby="access-title">
       <div class="body">
         <div class="access-icon">${icon("key")}</div>
-        <h2 id="access-title">${esc(t("Allow “{0}” to use your subscriptions?", req.name))}</h2>
+        <h2 id="access-title">${esc(prompt.title)}</h2>
         <div class="origin mono" title="${esc(req.origin)}">${esc(req.origin)}</div>
         ${note ? `<p class="caption ${note.warn ? "warn" : ""}">${esc(note.text)}</p>` : ""}
-        <p>${t("It will be able to send requests through your signed-in ChatGPT and Claude accounts. You can revoke access anytime in Settings.")}</p>
+        <p>${esc(prompt.body)}</p>
+        ${prompt.web ? `<p>${esc(t("It will also be able to search the web and read web pages through this computer. Sites see your IP address."))}</p>` : ""}
         ${more}
       </div>
       <div class="actions">
@@ -230,7 +252,7 @@ function grantsHTML() {
           (g) => `<div class="row">
         <div class="tile">${icon("key")}</div>
         <div class="grow">
-          <div class="label truncate" title="${esc(g.name)}">${esc(g.name)}</div>
+          <div class="label truncate" title="${esc(g.name)}">${esc(g.name)}${(g.scopes || []).includes("web") ? `<span class="badge">${t("Web")}</span>` : ""}</div>
           <div class="caption truncate" title="${esc(g.origin)}">${esc(g.origin)} · ${esc(t("allowed {0}", formatDate(g.granted_at)))} · <span class="mono">${esc(g.key_hint)}</span></div>
         </div>
         <button class="btn danger" data-click="revokeGrant" data-id="${esc(g.id)}" data-name="${esc(g.name)}" ${running() ? "" : "disabled"}>${t("Revoke")}</button>
@@ -408,6 +430,89 @@ function modelsHTML() {
     ${list}`;
 }
 
+const WEB_PROVIDERS = [
+  { id: "brave", title: "Brave Search", url: "https://brave.com/search/api/" },
+  { id: "tavily", title: "Tavily", url: "https://app.tavily.com/" },
+  { id: "exa", title: "Exa", url: "https://dashboard.exa.ai/api-keys" },
+];
+
+function webAccessHTML() {
+  const w = state.webTools || { enabled: true, search: { default: "brave", providers: {} }, domains: { mode: "denylist", list: [] } };
+  const providers = (w.search && w.search.providers) || {};
+  const keyOf = (id) => (providers[id] && providers[id]["api-key"]) || "";
+  const withKeys = WEB_PROVIDERS.filter((p) => keyOf(p.id));
+  const domains = w.domains || { mode: "denylist", list: [] };
+  const off = !running();
+  const keyRows = WEB_PROVIDERS.map(
+    (p) => `<div class="row">
+        <div class="grow label">${esc(p.title)}</div>
+        <div class="inline">
+          <input class="input mono web-key" type="password" data-change="webTools" data-webkey="${p.id}" value="${esc(keyOf(p.id))}" placeholder="${esc(t("API key"))}" autocomplete="off" spellcheck="false" aria-label="${esc(t("{0} API key", p.title))}" ${off ? "disabled" : ""}>
+          <button class="btn small" data-click="openURL" data-url="${p.url}">${t("Get a key")}</button>
+        </div>
+      </div>`,
+  ).join("");
+  const picker = withKeys.length
+    ? `<select class="select" id="web-default" data-change="webTools" aria-label="${t("Default search")}" ${off ? "disabled" : ""}>${withKeys
+        .map((p) => `<option value="${p.id}" ${p.id === w.search.default ? "selected" : ""}>${esc(p.title)}</option>`)
+        .join("")}</select>`
+    : `<select class="select" id="web-default" aria-label="${t("Default search")}" disabled><option>—</option></select>`;
+  return `
+    <h2 class="section-title">${t("Web access")}</h2>
+    <div class="card">
+      <div class="row"><div class="grow label">${t("Let connected apps search and read the web")}</div>${toggle("web-enabled", w.enabled !== false, "webTools", {
+        disabled: off,
+        label: t("Let connected apps search and read the web"),
+      })}</div>
+      ${keyRows}
+      <div class="row">
+        <div class="grow"><div class="label">${t("Default search")}</div>${
+          withKeys.length ? "" : `<div class="caption">${t("Add an API key to enable search. Reading pages works without one.")}</div>`
+        }</div>
+        ${picker}
+      </div>
+      <div class="row">
+        <div class="grow label">${t("Site list")}</div>
+        <select class="select" id="web-mode" data-change="webTools" aria-label="${t("Site list")}" ${off ? "disabled" : ""}>
+          <option value="denylist" ${domains.mode !== "allowlist" ? "selected" : ""}>${t("Block listed sites")}</option>
+          <option value="allowlist" ${domains.mode === "allowlist" ? "selected" : ""}>${t("Allow only listed sites")}</option>
+        </select>
+      </div>
+      <div class="row">
+        <textarea class="input mono grow" id="web-domains" data-change="webTools" rows="4" placeholder="${esc(t("One site per line, e.g. example.com"))}" spellcheck="false" aria-label="${esc(t("Site list"))}" ${off ? "disabled" : ""}>${esc(
+          (domains.list || []).join("\n"),
+        )}</textarea>
+      </div>
+    </div>
+    <p class="footnote">${t("Searches and page reads go out from this computer, so sites see your IP address. A site entry also covers its subdomains.")}</p>`;
+}
+
+// The whole web-tools object from what the fields show; sent whole so nothing
+// the user did not touch is lost.
+function collectWebTools() {
+  const w = JSON.parse(JSON.stringify(state.webTools || {}));
+  w.search = w.search || {};
+  w.search.providers = w.search.providers || {};
+  w.domains = w.domains || {};
+  const enabled = $("#web-enabled");
+  if (enabled) w.enabled = enabled.checked;
+  document.querySelectorAll("[data-webkey]").forEach((el) => {
+    w.search.providers[el.dataset.webkey] = { "api-key": el.value.trim() };
+  });
+  const def = $("#web-default");
+  if (def && def.options.length && def.value) w.search.default = def.value;
+  const mode = $("#web-mode");
+  if (mode) w.domains.mode = mode.value;
+  const list = $("#web-domains");
+  if (list) {
+    w.domains.list = list.value
+      .split(/\r?\n/)
+      .map((l) => l.trim().toLowerCase())
+      .filter(Boolean);
+  }
+  return w;
+}
+
 function settingsHTML() {
   const s = state.settings;
   const u = state.update;
@@ -445,6 +550,8 @@ function settingsHTML() {
 
     ${grantsHTML()}
     <p class="footnote">${t("Revoking an app turns off its key right away. Regenerating your API key leaves connected apps working.")}</p>
+
+    ${webAccessHTML()}
 
     <h2 class="section-title">${t("Updates")}</h2>
     <div class="card">
@@ -570,6 +677,7 @@ const clicks = {
   checkForUpdates: () => call("checkForUpdates"),
   openDataFolder: () => call("openDataFolder"),
   openLogs: () => call("openLogs"),
+  openURL: (el) => call("openURL", { text: el.dataset.url }),
   restartEngine: () => call("restartEngine"),
   quit: () => call("quit"),
   provider(el) {
@@ -641,6 +749,8 @@ document.addEventListener("change", (e) => {
     ui.snippet = el.value;
     el.blur();
     render();
+  } else if (action === "webTools") {
+    call("setWebTools", { webTools: collectWebTools() });
   } else if (action === "exposed") {
     call("setExposed", { provider: ui.provider, model: el.dataset.model, on: el.checked });
   } else {
@@ -681,7 +791,7 @@ function commitAlias(el) {
 
 document.addEventListener("keydown", (e) => {
   const el = e.target;
-  if (e.key === "Enter" && el.dataset.alias !== undefined) {
+  if (e.key === "Enter" && (el.dataset.alias !== undefined || el.dataset.webkey !== undefined)) {
     el.blur();
   } else if (e.key === "Enter" && el.id === "port") {
     clicks.applyPort();

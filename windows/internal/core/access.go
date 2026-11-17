@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/url"
 	"time"
@@ -15,13 +16,21 @@ import (
 // Approved apps become grants that can be revoked from Settings.
 
 // AccessRequest is a pending request from a local app or web page.
+//
+// Scopes, Upgrade, GrantID and AddedScopes come from engines that support web
+// tools; an older engine omits them, which reads as ["models"] and "not an
+// upgrade". An upgrade asks for more scopes on a grant that already exists.
 type AccessRequest struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Origin    string    `json:"origin"`
-	UserAgent string    `json:"user_agent,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
-	ExpiresAt time.Time `json:"expires_at"`
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Origin      string    `json:"origin"`
+	UserAgent   string    `json:"user_agent,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+	ExpiresAt   time.Time `json:"expires_at"`
+	Scopes      []string  `json:"scopes"`
+	Upgrade     bool      `json:"upgrade"`
+	GrantID     string    `json:"grant_id,omitempty"`
+	AddedScopes []string  `json:"added_scopes"`
 }
 
 // AccessGrant is an app that was allowed in.
@@ -31,7 +40,70 @@ type AccessGrant struct {
 	Origin    string    `json:"origin"`
 	KeyHint   string    `json:"key_hint"`
 	GrantedAt time.Time `json:"granted_at"`
+	Scopes    []string  `json:"scopes"`
 }
+
+const (
+	ScopeModels = "models"
+	ScopeWeb    = "web"
+)
+
+func hasScope(scopes []string, scope string) bool {
+	for _, s := range scopes {
+		if s == scope {
+			return true
+		}
+	}
+	return false
+}
+
+// defaultScopes is what a missing or empty "scopes" means.
+func defaultScopes(scopes []string) []string {
+	if len(scopes) == 0 {
+		return []string{ScopeModels}
+	}
+	return scopes
+}
+
+// UnmarshalJSON fills in the back-compat defaults for old engines.
+func (r *AccessRequest) UnmarshalJSON(data []byte) error {
+	type plain AccessRequest
+	var p plain
+	if err := json.Unmarshal(data, &p); err != nil {
+		return err
+	}
+	p.Scopes = defaultScopes(p.Scopes)
+	if p.AddedScopes == nil {
+		p.AddedScopes = []string{}
+	}
+	if !p.Upgrade {
+		p.GrantID, p.AddedScopes = "", []string{}
+	}
+	*r = AccessRequest(p)
+	return nil
+}
+
+func (g *AccessGrant) UnmarshalJSON(data []byte) error {
+	type plain AccessGrant
+	var p plain
+	if err := json.Unmarshal(data, &p); err != nil {
+		return err
+	}
+	p.Scopes = defaultScopes(p.Scopes)
+	*g = AccessGrant(p)
+	return nil
+}
+
+// AsksWeb reports whether approving would give the app web access.
+func (r AccessRequest) AsksWeb() bool {
+	if r.Upgrade {
+		return hasScope(r.AddedScopes, ScopeWeb)
+	}
+	return hasScope(r.Scopes, ScopeWeb)
+}
+
+// HasWeb reports whether the app may use the web tools.
+func (g AccessGrant) HasWeb() bool { return hasScope(g.Scopes, ScopeWeb) }
 
 type accessRequestList struct {
 	Requests []AccessRequest `json:"requests"`

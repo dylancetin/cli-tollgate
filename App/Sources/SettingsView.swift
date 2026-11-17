@@ -7,6 +7,23 @@ struct SettingsView: View {
     @State private var portDraft = ""
     @State private var confirmRegenerate = false
     @State private var grantToRevoke: AccessGrant?
+    // Web access edits. Toggles and pickers save at once; API keys and the site
+    // list save on Return or with the Save button, not on every keystroke.
+    @State private var webDraft = WebToolsConfig()
+    @State private var webDomainsText = ""
+    @State private var webLastSaved: WebToolsConfig?
+
+    private struct WebProviderInfo: Identifiable {
+        let id: String
+        let title: String
+        let keyURL: URL
+    }
+
+    private static let webProviders: [WebProviderInfo] = [
+        WebProviderInfo(id: "brave", title: "Brave Search", keyURL: URL(string: "https://brave.com/search/api/")!),
+        WebProviderInfo(id: "tavily", title: "Tavily", keyURL: URL(string: "https://app.tavily.com/")!),
+        WebProviderInfo(id: "exa", title: "Exa", keyURL: URL(string: "https://dashboard.exa.ai/api-keys")!),
+    ]
 
     var body: some View {
         Form {
@@ -52,7 +69,16 @@ struct SettingsView: View {
                         Image(systemName: "key")
                             .foregroundStyle(.secondary)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(grant.name).lineLimit(1)
+                            HStack(spacing: 4) {
+                                Text(grant.name).lineLimit(1)
+                                if grant.hasWeb {
+                                    Text("Web")
+                                        .font(.caption2.weight(.semibold))
+                                        .padding(.horizontal, 5)
+                                        .padding(.vertical, 1)
+                                        .background(Color.accentColor.opacity(0.15), in: Capsule())
+                                }
+                            }
                             Text(grantCaption(grant))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -71,6 +97,8 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
             .disabled(model.engineState != .running)
+
+            webAccessSection
 
             Section("Updates") {
                 Toggle("Check for updates automatically", isOn: $updater.automaticallyChecks)
@@ -126,9 +154,15 @@ struct SettingsView: View {
         .frame(minHeight: 320, idealHeight: 620, maxHeight: .infinity)
         .onAppear {
             portDraft = String(model.port)
+            loadWebDraft(model.webTools)
             Task { await model.refreshGrants() }
         }
         .onChange(of: model.port) { portDraft = String($0) }
+        .onChange(of: model.webTools) { tools in
+            // Our own save comes back as the same value; anything else (a refresh
+            // after a failed save, say) replaces what is on screen.
+            if tools != webLastSaved { loadWebDraft(tools) }
+        }
         .confirmationDialog("Regenerate the API key?", isPresented: $confirmRegenerate) {
             Button("Regenerate", role: .destructive) {
                 Task {
@@ -149,6 +183,107 @@ struct SettingsView: View {
         } message: { _ in
             Text("Its key stops working right away. It can ask for access again later.")
         }
+    }
+
+    private var webAccessSection: some View {
+        Section {
+            Toggle("Let connected apps search and read the web", isOn: Binding(
+                get: { webDraft.enabled },
+                set: { on in
+                    webDraft.enabled = on
+                    saveWeb()
+                }
+            ))
+            ForEach(Self.webProviders) { provider in
+                LabeledContent(provider.title) {
+                    HStack {
+                        SecureField("", text: Binding(
+                            get: { webDraft.apiKey(for: provider.id) },
+                            set: { webDraft.setAPIKey($0, for: provider.id) }
+                        ))
+                        .frame(width: 170)
+                        .onSubmit(saveWeb)
+                        Link("Get a key", destination: provider.keyURL)
+                    }
+                }
+            }
+            LabeledContent("Default search") {
+                Picker("", selection: Binding(
+                    get: { webPending.search.defaultProvider },
+                    set: { id in
+                        webDraft.search.defaultProvider = id
+                        saveWeb()
+                    }
+                )) {
+                    if webPending.providersWithKeys.isEmpty {
+                        Text("—").tag(webPending.search.defaultProvider)
+                    }
+                    ForEach(webProvidersWithKeys) { provider in
+                        Text(provider.title).tag(provider.id)
+                    }
+                }
+                .labelsHidden()
+                .disabled(webPending.providersWithKeys.isEmpty)
+            }
+            if webPending.providersWithKeys.isEmpty {
+                Text("Add an API key to enable search. Reading pages works without one.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Picker("Site list", selection: Binding(
+                get: { webDraft.domains.mode },
+                set: { mode in
+                    webDraft.domains.mode = mode
+                    saveWeb()
+                }
+            )) {
+                Text("Block listed sites").tag("denylist")
+                Text("Allow only listed sites").tag("allowlist")
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                TextEditor(text: $webDomainsText)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(minHeight: 70)
+                Text("One site per line, e.g. example.com")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            HStack {
+                Spacer()
+                Button("Save", action: saveWeb)
+                    .disabled(webPending == model.webTools)
+            }
+        } header: {
+            Text("Web access")
+        } footer: {
+            Text("Searches and page reads go out from this computer, so sites see your IP address. A site entry also covers its subdomains.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .disabled(model.engineState != .running)
+    }
+
+    /// The draft with the site list text applied, cleaned the way it will be saved.
+    private var webPending: WebToolsConfig {
+        var config = webDraft
+        config.domains.list = WebToolsConfig.domains(fromText: webDomainsText)
+        return config.normalized()
+    }
+
+    private var webProvidersWithKeys: [WebProviderInfo] {
+        let withKeys = webPending.providersWithKeys
+        return Self.webProviders.filter { withKeys.contains($0.id) }
+    }
+
+    private func loadWebDraft(_ config: WebToolsConfig) {
+        webDraft = config
+        webDomainsText = config.domains.list.joined(separator: "\n")
+    }
+
+    private func saveWeb() {
+        let config = webPending
+        webLastSaved = config
+        Task { await model.setWebTools(config) }
     }
 
     private var cloakingCaption: String {

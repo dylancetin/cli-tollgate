@@ -64,6 +64,12 @@ const TR = {
   "Allow “{0}” to use your subscriptions?": "“{0}” aboneliklerinizi kullanabilsin mi?",
   "It will be able to send requests through your signed-in ChatGPT and Claude accounts. You can revoke access anytime in Settings.":
     "Giriş yaptığınız ChatGPT ve Claude hesaplarınız üzerinden istek gönderebilecek. Erişimi istediğiniz zaman Ayarlar'dan kaldırabilirsiniz.",
+  "Let “{0}” also search the web?": "“{0}” web'de de arama yapabilsin mi?",
+  "Allow “{0}” to use your subscriptions and search the web?": "“{0}” aboneliklerinizi kullanabilsin ve web'de arama yapabilsin mi?",
+  "This app is already connected to CLI Tollgate. It is asking for more access.":
+    "Bu uygulama CLI Tollgate'e zaten bağlı. Daha fazla erişim istiyor.",
+  "It will also be able to search the web and read web pages through this computer. Sites see your IP address.":
+    "Bu bilgisayar üzerinden web'de arama yapıp sayfaları okuyabilecek. Siteler IP adresinizi görür.",
   Allow: "İzin ver",
   Deny: "Reddet",
   "Allowed {0}": "{0} için izin verildi",
@@ -78,6 +84,7 @@ const TR = {
   "Its key stops working right away. It can ask for access again later.":
     "Anahtarı hemen çalışmayı durdurur. Daha sonra yeniden erişim isteyebilir.",
   "Access revoked": "Erişim kaldırıldı",
+  Web: "Web",
 
   // Models
   Provider: "Sağlayıcı",
@@ -112,6 +119,19 @@ const TR = {
     "Web sayfaları proxy'yi çağırabilir (CORS açık), ancak her istek API anahtarı gerektirir.",
   "Revoking an app turns off its key right away. Regenerating your API key leaves connected apps working.":
     "Bir uygulamanın erişimini kaldırmak anahtarını hemen devre dışı bırakır. API anahtarınızı yeniden oluşturmak bağlı uygulamaları etkilemez.",
+  "Web access": "Web erişimi",
+  "Let connected apps search and read the web": "Bağlı uygulamaların web'de arama yapıp sayfaları okumasına izin ver",
+  "{0} API key": "{0} API anahtarı",
+  "Get a key": "Anahtar al",
+  "Default search": "Varsayılan arama",
+  "Add an API key to enable search. Reading pages works without one.":
+    "Aramayı etkinleştirmek için bir API anahtarı ekleyin. Sayfaları okumak anahtarsız da çalışır.",
+  "Site list": "Site listesi",
+  "Block listed sites": "Listedeki siteleri engelle",
+  "Allow only listed sites": "Yalnızca listedeki sitelere izin ver",
+  "One site per line, e.g. example.com": "Her satıra bir site, örn. example.com",
+  "Searches and page reads go out from this computer, so sites see your IP address. A site entry also covers its subdomains.":
+    "Aramalar ve sayfa okumaları bu bilgisayardan yapılır, bu yüzden siteler IP adresinizi görür. Bir site girdisi alt alan adlarını da kapsar.",
   Updates: "Güncellemeler",
   "Check for updates automatically": "Güncellemeleri otomatik denetle",
   "Install updates when I quit": "Çıkarken güncellemeleri yükle",

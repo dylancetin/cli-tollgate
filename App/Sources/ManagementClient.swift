@@ -232,11 +232,37 @@ struct AccessRequest: Decodable, Identifiable, Equatable {
     let name: String
     let origin: String
     let createdAt: String?
+    /// What the app asks for. Older engines send nothing, which means ["models"].
+    let scopes: [String]
+    /// True when an already connected app asks for more scopes on its existing grant.
+    let upgrade: Bool
+    let grantID: String?
+    let addedScopes: [String]
 
     enum CodingKeys: String, CodingKey {
-        case id, name, origin
+        case id, name, origin, scopes, upgrade
         case createdAt = "created_at"
+        case grantID = "grant_id"
+        case addedScopes = "added_scopes"
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        origin = try container.decode(String.self, forKey: .origin)
+        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+        let decodedScopes = try container.decodeIfPresent([String].self, forKey: .scopes) ?? []
+        scopes = decodedScopes.isEmpty ? ["models"] : decodedScopes
+        upgrade = try container.decodeIfPresent(Bool.self, forKey: .upgrade) ?? false
+        grantID = try container.decodeIfPresent(String.self, forKey: .grantID)
+        addedScopes = try container.decodeIfPresent([String].self, forKey: .addedScopes) ?? []
+    }
+
+    /// A new connection that also asks for web access.
+    var asksWebOnConnect: Bool { !upgrade && scopes.contains("web") }
+    /// An existing app asking to also use the web tools.
+    var isWebUpgrade: Bool { upgrade && addedScopes.contains("web") }
 
     /// What to tell the user about the origin; `warn` marks the risky cases.
     var originNote: (text: String, warn: Bool)? {
@@ -261,12 +287,27 @@ struct AccessGrant: Decodable, Identifiable, Equatable {
     let origin: String
     let keyHint: String
     let grantedAt: String
+    /// Missing in answers from older engines, which means ["models"].
+    let scopes: [String]
 
     enum CodingKeys: String, CodingKey {
-        case id, name, origin
+        case id, name, origin, scopes
         case keyHint = "key_hint"
         case grantedAt = "granted_at"
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        origin = try container.decode(String.self, forKey: .origin)
+        keyHint = try container.decode(String.self, forKey: .keyHint)
+        grantedAt = try container.decode(String.self, forKey: .grantedAt)
+        let decodedScopes = try container.decodeIfPresent([String].self, forKey: .scopes) ?? []
+        scopes = decodedScopes.isEmpty ? ["models"] : decodedScopes
+    }
+
+    var hasWeb: Bool { scopes.contains("web") }
 
     var grantedDate: Date? {
         let withFraction = ISO8601DateFormatter()
@@ -277,4 +318,139 @@ struct AccessGrant: Decodable, Identifiable, Equatable {
 
 struct AccessGrantList: Decodable {
     let grants: [AccessGrant]
+}
+
+// MARK: - Web access
+
+/// The engine's `web-tools` config section. It is always sent whole.
+struct WebToolsConfig: Codable, Equatable {
+    /// Search providers in the order they are offered.
+    static let providerIDs = ["brave", "tavily", "exa"]
+
+    struct ProviderEntry: Codable, Equatable {
+        var apiKey: String
+
+        enum CodingKeys: String, CodingKey { case apiKey = "api-key" }
+
+        init(apiKey: String = "") { self.apiKey = apiKey }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            apiKey = try container.decodeIfPresent(String.self, forKey: .apiKey) ?? ""
+        }
+    }
+
+    struct Search: Codable, Equatable {
+        var defaultProvider: String
+        var providers: [String: ProviderEntry]
+
+        enum CodingKeys: String, CodingKey {
+            case defaultProvider = "default"
+            case providers
+        }
+
+        init(defaultProvider: String = "brave", providers: [String: ProviderEntry] = [:]) {
+            self.defaultProvider = defaultProvider
+            self.providers = providers
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            defaultProvider = try container.decodeIfPresent(String.self, forKey: .defaultProvider) ?? "brave"
+            providers = try container.decodeIfPresent([String: ProviderEntry].self, forKey: .providers) ?? [:]
+        }
+    }
+
+    struct Domains: Codable, Equatable {
+        /// "denylist" or "allowlist".
+        var mode: String
+        var list: [String]
+
+        enum CodingKeys: String, CodingKey { case mode, list }
+
+        init(mode: String = "denylist", list: [String] = []) {
+            self.mode = mode
+            self.list = list
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            mode = try container.decodeIfPresent(String.self, forKey: .mode) ?? "denylist"
+            list = try container.decodeIfPresent([String].self, forKey: .list) ?? []
+        }
+    }
+
+    var enabled: Bool
+    var search: Search
+    var domains: Domains
+
+    enum CodingKeys: String, CodingKey { case enabled, search, domains }
+
+    /// What an engine without a `web-tools` section behaves like.
+    init() {
+        enabled = true
+        search = Search()
+        domains = Domains()
+        normalize()
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        search = try container.decodeIfPresent(Search.self, forKey: .search) ?? Search()
+        domains = try container.decodeIfPresent(Domains.self, forKey: .domains) ?? Domains()
+        normalize()
+    }
+
+    /// Providers that have an API key, in the order they are offered.
+    var providersWithKeys: [String] {
+        Self.providerIDs.filter { !(search.providers[$0]?.apiKey ?? "").isEmpty }
+    }
+
+    func apiKey(for provider: String) -> String { search.providers[provider]?.apiKey ?? "" }
+
+    mutating func setAPIKey(_ key: String, for provider: String) {
+        search.providers[provider] = ProviderEntry(apiKey: key)
+    }
+
+    /// Trims keys, fills in every provider, keeps the default on a provider that
+    /// has a key, and cleans the site list (one hostname each, lowercase, no repeats).
+    mutating func normalize() {
+        for id in Self.providerIDs {
+            search.providers[id] = ProviderEntry(apiKey: apiKey(for: id).trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        let known = Self.providerIDs.contains(search.defaultProvider)
+        if !known || apiKey(for: search.defaultProvider).isEmpty {
+            if let first = providersWithKeys.first {
+                search.defaultProvider = first
+            } else if !known {
+                search.defaultProvider = Self.providerIDs[0]
+            }
+        }
+        if domains.mode != "allowlist" { domains.mode = "denylist" }
+        domains.list = Self.cleanDomains(domains.list)
+    }
+
+    func normalized() -> WebToolsConfig {
+        var copy = self
+        copy.normalize()
+        return copy
+    }
+
+    static func cleanDomains(_ list: [String]) -> [String] {
+        var seen = Set<String>()
+        var out: [String] = []
+        for entry in list {
+            let host = entry.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if host.isEmpty || seen.contains(host) { continue }
+            seen.insert(host)
+            out.append(host)
+        }
+        return out
+    }
+
+    /// One hostname per line, as typed in Settings.
+    static func domains(fromText text: String) -> [String] {
+        cleanDomains(text.components(separatedBy: .newlines))
+    }
 }

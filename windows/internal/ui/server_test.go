@@ -85,3 +85,19 @@ func TestAccessControl(t *testing.T) {
 		t.Fatalf("unknown action: %d", got)
 	}
 }
+
+func TestSetWebToolsNeedsSettings(t *testing.T) {
+	app := core.NewApp(core.Paths{Data: t.TempDir(), Engine: "missing"}, &fakePlatform{}, "1.0", 0)
+	s := &Server{app: app}
+	if err := s.dispatch("setWebTools", actionBody{}); err == nil {
+		t.Fatal("setWebTools without settings must fail")
+	}
+	w := core.DefaultWebTools()
+	w.Enabled = false
+	if err := s.dispatch("setWebTools", actionBody{WebTools: &w}); err != nil {
+		t.Fatal(err)
+	}
+	if app.WebTools().Enabled {
+		t.Fatal("settings not applied")
+	}
+}

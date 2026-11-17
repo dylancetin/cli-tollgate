@@ -61,6 +61,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     @Published private(set) var grants: [AccessGrant] = []
+    @Published private(set) var webTools = WebToolsConfig()
 
     private var loginState: String?
     private var refreshTimer: Timer?
@@ -152,6 +153,9 @@ final class AppModel: ObservableObject {
             if let codex: CodexUpstreamSettings = try await client.getOptional("/v8/management/config/upstream/codex") {
                 codexCloaking = !(codex.disableCloaking ?? false)
             }
+            // Absent from config.yaml until first saved: the defaults apply.
+            let tools: WebToolsConfig? = try await client.getOptional("/v8/management/config/web-tools")
+            webTools = (tools ?? WebToolsConfig()).normalized()
         } catch {
             report(error)
         }
@@ -323,6 +327,15 @@ final class AppModel: ObservableObject {
         await save("/v8/management/config/upstream/codex/disable-codex-cloaking", !on)
     }
 
+    // MARK: - Web access
+
+    /// Saves the whole `web-tools` section (the engine hot-reloads it).
+    func setWebTools(_ config: WebToolsConfig) async {
+        let next = config.normalized()
+        webTools = next
+        await save("/v8/management/config/web-tools", next)
+    }
+
     // MARK: - Settings
 
     /// Replaces the app's own key (the first one). Keys handed to apps through
@@ -382,12 +395,25 @@ final class AppModel: ObservableObject {
 
     private func prompt(for request: AccessRequest) async {
         let alert = NSAlert()
-        alert.messageText = String(localized: "Allow “\(request.name)” to use your subscriptions?")
+        if request.isWebUpgrade {
+            alert.messageText = String(localized: "Let “\(request.name)” also search the web?")
+        } else if request.asksWebOnConnect {
+            alert.messageText = String(localized: "Allow “\(request.name)” to use your subscriptions and search the web?")
+        } else {
+            alert.messageText = String(localized: "Allow “\(request.name)” to use your subscriptions?")
+        }
         var info = request.origin
         if let note = request.originNote {
             info += "\n" + (note.warn ? "⚠︎ " : "") + note.text
         }
-        info += "\n\n" + String(localized: "It will be able to send requests through your signed-in ChatGPT and Claude accounts. You can revoke access anytime in Settings.")
+        if request.isWebUpgrade {
+            info += "\n\n" + String(localized: "This app is already connected to CLI Tollgate. It is asking for more access.")
+        } else {
+            info += "\n\n" + String(localized: "It will be able to send requests through your signed-in ChatGPT and Claude accounts. You can revoke access anytime in Settings.")
+        }
+        if request.isWebUpgrade || request.asksWebOnConnect {
+            info += "\n\n" + String(localized: "It will also be able to search the web and read web pages through this computer. Sites see your IP address.")
+        }
         alert.informativeText = info
         alert.alertStyle = request.originNote?.warn == true ? .warning : .informational
         // Deny is the default button so a stray Return never grants access.

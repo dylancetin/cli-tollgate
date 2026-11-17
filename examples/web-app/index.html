@@ -28,9 +28,10 @@
   <script type="module">
     // Copy this function into your web app. It resolves with the API key once
     // the user clicks Allow, and throws if they deny or the request expires.
+    // Pass scopes: ["models", "web"] to also ask for the web search/fetch tools.
     const TOLLGATE = "http://127.0.0.1:8317";
 
-    async function requestTollgateAccess({ name, baseURL = TOLLGATE, onPending } = {}) {
+    async function requestTollgateAccess({ name, baseURL = TOLLGATE, scopes, onPending } = {}) {
       // The page generates its own key; it never has to be sent back.
       const bytes = crypto.getRandomValues(new Uint8Array(24));
       const key = "tg-app-" + Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
@@ -38,7 +39,7 @@
       const res = await fetch(`${baseURL}/access/requests`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, key }),
+        body: JSON.stringify(scopes ? { name, key, scopes } : { name, key }),
       });
       const body = await res.json().catch(() => ({}));
       if (res.status !== 202) throw new Error(body.error || `CLI Tollgate answered ${res.status}`);
