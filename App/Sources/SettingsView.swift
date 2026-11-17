@@ -17,12 +17,16 @@ struct SettingsView: View {
         let id: String
         let title: String
         let keyURL: URL
+        var keyless: Bool { WebToolsConfig.keylessProviderIDs.contains(id) }
     }
 
     private static let webProviders: [WebProviderInfo] = [
         WebProviderInfo(id: "brave", title: "Brave Search", keyURL: URL(string: "https://brave.com/search/api/")!),
         WebProviderInfo(id: "tavily", title: "Tavily", keyURL: URL(string: "https://app.tavily.com/")!),
         WebProviderInfo(id: "exa", title: "Exa", keyURL: URL(string: "https://dashboard.exa.ai/api-keys")!),
+        WebProviderInfo(id: "parallel", title: "Parallel", keyURL: URL(string: "https://platform.parallel.ai/")!),
+        WebProviderInfo(id: "firecrawl", title: "Firecrawl", keyURL: URL(string: "https://www.firecrawl.dev/app/api-keys")!),
+        WebProviderInfo(id: "tinyfish", title: "TinyFish", keyURL: URL(string: "https://agent.tinyfish.ai/api-keys")!),
     ]
 
     var body: some View {
@@ -194,17 +198,30 @@ struct SettingsView: View {
                     saveWeb()
                 }
             ))
+            Toggle(isOn: Binding(
+                get: { webDraft.search.keyless },
+                set: { on in
+                    webDraft.search.keyless = on
+                    saveWeb()
+                }
+            )) {
+                Text("Search without an API key")
+                Text("Most providers work without a key, with lower limits. Adding a key lifts them.")
+            }
             ForEach(Self.webProviders) { provider in
-                LabeledContent(provider.title) {
+                LabeledContent {
                     HStack {
                         SecureField("", text: Binding(
                             get: { webDraft.apiKey(for: provider.id) },
                             set: { webDraft.setAPIKey($0, for: provider.id) }
-                        ))
+                        ), prompt: provider.keyless ? Text("API key (optional)") : Text("API key"))
                         .frame(width: 170)
                         .onSubmit(saveWeb)
                         Link("Get a key", destination: provider.keyURL)
                     }
+                } label: {
+                    Text(provider.title)
+                    provider.keyless ? Text("Works without a key") : Text("Key required")
                 }
             }
             LabeledContent("Default search") {
@@ -215,18 +232,24 @@ struct SettingsView: View {
                         saveWeb()
                     }
                 )) {
-                    if webPending.providersWithKeys.isEmpty {
+                    if webPending.usableProviders.isEmpty {
                         Text("—").tag(webPending.search.defaultProvider)
+                    } else {
+                        Text("Automatic").tag(WebToolsConfig.autoProvider)
                     }
-                    ForEach(webProvidersWithKeys) { provider in
+                    ForEach(webUsableProviders) { provider in
                         Text(provider.title).tag(provider.id)
                     }
                 }
                 .labelsHidden()
-                .disabled(webPending.providersWithKeys.isEmpty)
+                .disabled(webPending.usableProviders.isEmpty)
             }
-            if webPending.providersWithKeys.isEmpty {
-                Text("Add an API key to enable search. Reading pages works without one.")
+            if webPending.usableProviders.isEmpty {
+                Text("Add an API key or allow search without one. Reading pages works either way.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if webPending.search.defaultProvider == WebToolsConfig.autoProvider {
+                Text("Picks a provider for each app and moves on to another when one is busy.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -270,9 +293,9 @@ struct SettingsView: View {
         return config.normalized()
     }
 
-    private var webProvidersWithKeys: [WebProviderInfo] {
-        let withKeys = webPending.providersWithKeys
-        return Self.webProviders.filter { withKeys.contains($0.id) }
+    private var webUsableProviders: [WebProviderInfo] {
+        let usable = webPending.usableProviders
+        return Self.webProviders.filter { usable.contains($0.id) }
     }
 
     private func loadWebDraft(_ config: WebToolsConfig) {

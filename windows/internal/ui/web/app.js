@@ -430,33 +430,47 @@ function modelsHTML() {
     ${list}`;
 }
 
+// keyless: works without an API key (lower limits); a key lifts them.
 const WEB_PROVIDERS = [
-  { id: "brave", title: "Brave Search", url: "https://brave.com/search/api/" },
-  { id: "tavily", title: "Tavily", url: "https://app.tavily.com/" },
-  { id: "exa", title: "Exa", url: "https://dashboard.exa.ai/api-keys" },
+  { id: "brave", title: "Brave Search", url: "https://brave.com/search/api/", keyless: false },
+  { id: "tavily", title: "Tavily", url: "https://app.tavily.com/", keyless: true },
+  { id: "exa", title: "Exa", url: "https://dashboard.exa.ai/api-keys", keyless: true },
+  { id: "parallel", title: "Parallel", url: "https://platform.parallel.ai/", keyless: true },
+  { id: "firecrawl", title: "Firecrawl", url: "https://www.firecrawl.dev/app/api-keys", keyless: true },
+  { id: "tinyfish", title: "TinyFish", url: "https://agent.tinyfish.ai/api-keys", keyless: true },
 ];
 
 function webAccessHTML() {
-  const w = state.webTools || { enabled: true, search: { default: "brave", providers: {} }, domains: { mode: "denylist", list: [] } };
-  const providers = (w.search && w.search.providers) || {};
+  const w = state.webTools || { enabled: true, search: { default: "auto", keyless: true, providers: {} }, domains: { mode: "denylist", list: [] } };
+  const search = w.search || {};
+  const providers = search.providers || {};
+  const keylessOn = search.keyless !== false;
   const keyOf = (id) => (providers[id] && providers[id]["api-key"]) || "";
-  const withKeys = WEB_PROVIDERS.filter((p) => keyOf(p.id));
+  const usable = WEB_PROVIDERS.filter((p) => keyOf(p.id) || (keylessOn && p.keyless));
+  const current = usable.some((p) => p.id === search.default) ? search.default : "auto";
   const domains = w.domains || { mode: "denylist", list: [] };
   const off = !running();
   const keyRows = WEB_PROVIDERS.map(
     (p) => `<div class="row">
-        <div class="grow label">${esc(p.title)}</div>
+        <div class="grow"><div class="label">${esc(p.title)}</div><div class="caption">${p.keyless ? t("Works without a key") : t("Key required")}</div></div>
         <div class="inline">
-          <input class="input mono web-key" type="password" data-change="webTools" data-webkey="${p.id}" value="${esc(keyOf(p.id))}" placeholder="${esc(t("API key"))}" autocomplete="off" spellcheck="false" aria-label="${esc(t("{0} API key", p.title))}" ${off ? "disabled" : ""}>
+          <input class="input mono web-key" type="password" data-change="webTools" data-webkey="${p.id}" value="${esc(keyOf(p.id))}" placeholder="${esc(
+            p.keyless ? t("API key (optional)") : t("API key"),
+          )}" autocomplete="off" spellcheck="false" aria-label="${esc(t("{0} API key", p.title))}" ${off ? "disabled" : ""}>
           <button class="btn small" data-click="openURL" data-url="${p.url}">${t("Get a key")}</button>
         </div>
       </div>`,
   ).join("");
-  const picker = withKeys.length
-    ? `<select class="select" id="web-default" data-change="webTools" aria-label="${t("Default search")}" ${off ? "disabled" : ""}>${withKeys
-        .map((p) => `<option value="${p.id}" ${p.id === w.search.default ? "selected" : ""}>${esc(p.title)}</option>`)
-        .join("")}</select>`
+  const picker = usable.length
+    ? `<select class="select" id="web-default" data-change="webTools" aria-label="${t("Default search")}" ${off ? "disabled" : ""}>
+        <option value="auto" ${current === "auto" ? "selected" : ""}>${t("Automatic")}</option>
+        ${usable.map((p) => `<option value="${p.id}" ${p.id === current ? "selected" : ""}>${esc(p.title)}</option>`).join("")}</select>`
     : `<select class="select" id="web-default" aria-label="${t("Default search")}" disabled><option>—</option></select>`;
+  const defaultCaption = !usable.length
+    ? `<div class="caption">${t("Add an API key or allow search without one. Reading pages works either way.")}</div>`
+    : current === "auto"
+      ? `<div class="caption">${t("Picks a provider for each app and moves on to another when one is busy.")}</div>`
+      : "";
   return `
     <h2 class="section-title">${t("Web access")}</h2>
     <div class="card">
@@ -464,11 +478,15 @@ function webAccessHTML() {
         disabled: off,
         label: t("Let connected apps search and read the web"),
       })}</div>
+      <div class="row">
+        <div class="grow"><div class="label">${t("Search without an API key")}</div><div class="caption">${t(
+          "Most providers work without a key, with lower limits. Adding a key lifts them.",
+        )}</div></div>
+        ${toggle("web-keyless", keylessOn, "webTools", { disabled: off, label: t("Search without an API key") })}
+      </div>
       ${keyRows}
       <div class="row">
-        <div class="grow"><div class="label">${t("Default search")}</div>${
-          withKeys.length ? "" : `<div class="caption">${t("Add an API key to enable search. Reading pages works without one.")}</div>`
-        }</div>
+        <div class="grow"><div class="label">${t("Default search")}</div>${defaultCaption}</div>
         ${picker}
       </div>
       <div class="row">
@@ -496,6 +514,8 @@ function collectWebTools() {
   w.domains = w.domains || {};
   const enabled = $("#web-enabled");
   if (enabled) w.enabled = enabled.checked;
+  const keyless = $("#web-keyless");
+  if (keyless) w.search.keyless = keyless.checked;
   document.querySelectorAll("[data-webkey]").forEach((el) => {
     w.search.providers[el.dataset.webkey] = { "api-key": el.value.trim() };
   });

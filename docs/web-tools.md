@@ -1,9 +1,15 @@
 # Web tools for the admin assistant: Tollgate API contract
 
-Status: **final for v1** (client implemented in `apps/admin`, server implemented in
+Status: **v1.1** (client implemented in `apps/admin`, server implemented in
 CLI Tollgate: `dylancetin/cli-tollgate`, engine submodule `dylancetin/CLIProxyAPI`, package
 `internal/webtools`). This copy matches the client's `docs/tollgate-web-tools.md`; where the server
 had to settle a detail the contract left open, it says so in **Implementation notes** at the end.
+
+**v1.1 (keyless search)** is backward compatible with v1 clients: search works with no API key
+(five of the six providers have a keyless mode), three providers were added (`parallel`,
+`firecrawl`, `tinyfish`), the probe gained `keyless` and `mode`, and a search that names no
+provider moves on to another provider when one is rate limited. See **Changes in v1.1** at the end
+for the list and what a client may want to adopt.
 
 The admin panel's AI assistant runs in the browser. To let it search the web and read pages it
 needs a proxy (browsers block cross-origin reads), and that proxy is Tollgate, the desktop app
@@ -118,7 +124,13 @@ Under `/v1` with the normal auth middleware, so `401` for an unknown key.
 {
   "scopes": ["models", "web"],
   "tools": {
-    "web_search": { "available": true, "provider": "brave", "providers": ["brave", "exa"] },
+    "web_search": {
+      "available": true,
+      "provider": "brave",
+      "providers": ["brave", "tavily", "exa", "parallel", "firecrawl", "tinyfish"],
+      "keyless": ["tavily", "exa", "parallel", "firecrawl", "tinyfish"],
+      "mode": "auto"
+    },
     "web_fetch":  { "available": true, "render": false }
   },
   "limits": {
@@ -135,12 +147,25 @@ Under `/v1` with the normal auth middleware, so `401` for an unknown key.
 - `available: false` comes with `"reason"`:
   - `"scope_required"`: the key lacks `web`;
   - `"disabled"`: web tools are switched off in Tollgate's settings;
-  - `"not_configured"`: (`web_search` only) no search provider has an API key. `web_fetch` works
-    without one.
-- `providers`: the search providers that have an API key, in the order `brave`, `tavily`, `exa`
-  (only those three names exist in v1; clients ignore names they don't know). `provider`: the
-  default, the one used when a search names none. It is the user's chosen default when that one
-  has a key, else the first entry of `providers`. Both are omitted when `available` is false.
+  - `"not_configured"`: (`web_search` only) no search provider can search: the user switched
+    keyless search off and set no API key. With the default settings this never happens.
+    `web_fetch` works without any key.
+- `providers`: the search providers that **can search**, in the order `brave`, `tavily`, `exa`,
+  `parallel`, `firecrawl`, `tinyfish`. A provider can search when it has an API key, or when it
+  supports keyless use (all but Brave) and keyless search is on (the default). Clients ignore
+  names they don't know.
+- `keyless` (v1.1): the subset of `providers` that will answer **without** an API key, with the
+  provider's lower free limits (a daily or per-minute cap per IP address). Providers in
+  `providers` but not here have a key.
+- `mode` (v1.1): `"default"` when the user picked a provider as the default and it can search;
+  `"auto"` when Tollgate picks (the default setting, or a chosen provider that can't search).
+  In `auto` mode Tollgate keeps using the provider an app used last, else picks one at random,
+  preferring providers with a key over keyless ones.
+- `provider`: the provider the next search that names none will use: in `default` mode the
+  chosen default; in `auto` mode the provider this key is bound to (picked on first use, at random
+  among the providers with a key, else among the keyless ones; the probe makes that pick if no
+  search has yet). A rate-limited (paused, §3) provider is skipped. Always one of `providers`. `provider`, `providers`, `keyless` and `mode` are omitted when `available` is
+  false.
 - `render` is `false` until a headless renderer exists; it is reserved, and clients send nothing
   for it.
 
@@ -153,6 +178,7 @@ Client behaviour:
 | `200`, `web` not in `scopes`                    | No web tools; Connections view offers **Web erişimi iste** (upgrade request, §1.3). |
 | `200`, tool `available: true`                   | Offers that tool (`webSearch` ↔ `web_search`, `fetchPage` ↔ `web_fetch`). |
 | `200`, tool unavailable (`disabled`/`not_configured`) | That tool is not offered; Connections view says why.      |
+| `200`, `web_search` available, `keyless` non-empty | Offers search. Optionally notes that keyless providers have lower limits (v1.1). |
 
 The client caches the probe per (base URL, key) for 60 s and re-probes after an upgrade or a
 `scope_required`/`disabled`/`not_configured` error from a tool call.
@@ -174,7 +200,7 @@ Request:
 | `freshness` | `"day" \| "week" \| "month" \| "year"` | optional                                                  |
 | `site`      | string                                 | optional hostname (`example.com`, no scheme/path); restricts results to it and its subdomains |
 | `lang`      | string                                 | optional ISO 639-1 (`tr`, `en`); a hint for result language |
-| `provider`  | `"brave" \| "tavily" \| "exa"`         | optional; one of the probe's `providers`. Absent → the default |
+| `provider`  | `"brave" \| "tavily" \| "exa" \| "parallel" \| "firecrawl" \| "tinyfish"` | optional; one of the probe's `providers`. Absent → the default, with failover (below) |
 
 Unknown fields are ignored. Response:
 
@@ -199,26 +225,55 @@ Unknown fields are ignored. Response:
   entities decoded, whitespace collapsed).
 - `published`: optional, ISO 8601 date or date-time, only when the provider gives one.
 - `site`: the URL's hostname, lowercase.
-- Empty `results` is a success. `provider`: the provider that answered.
-- No fallback to another provider when the chosen one fails: the error is returned, so the
-  agent (or user) decides whether to retry elsewhere.
+- Empty `results` is a success. `provider`: the provider that answered. It may differ from the
+  probe's `provider` after a failover.
+- **Rate-limit failover (v1.1)**, only for a search that names **no** `provider`: when the
+  provider answers `429` (or `402`, which keyless modes use once a free cap is spent), Tollgate
+  pauses it for its `Retry-After` (60 s when absent) and asks the next provider that can search
+  and isn't paused or already tried in this search (providers with a key first). A paused
+  provider is skipped without a call until its pause ends. Any other failure (`5xx`, a bad key,
+  garbage, a timeout) is returned as is, without trying another provider.
+- A search that **names** a `provider` gets that provider only, as in v1. If it is rate limited
+  the error is `search_failed` with `status: 429` and `retry_after`.
+- When every provider that can search is paused, or all were tried and each answered `429`, the
+  error is `502 search_failed` with `status: 429` and `retry_after` (seconds until the first
+  pause ends).
 
-Provider mapping (Tollgate-internal; the client only sees the normalized shape):
+Providers (Tollgate-internal; the client only sees the normalized shape):
 
-| Field       | Brave Search API                     | Tavily                         | Exa                                    |
-| ----------- | ------------------------------------ | ------------------------------ | -------------------------------------- |
-| `query`     | `q`                                  | `query`                        | `query` (type `auto`)                  |
-| `count`     | `count`                              | `max_results`                  | `numResults`                           |
-| `freshness` | `freshness=pd/pw/pm/py`              | `time_range=day/week/month/year` | `startPublishedDate` = now − period  |
-| `site`      | append ` site:<host>` to `q`         | `include_domains: [host]`      | `includeDomains: [host]`               |
-| `lang`      | `search_lang`                        | ignored                        | ignored                                |
-| snippet     | `description`                        | `content`                      | `highlights`/`summary`/text excerpt (request a short one) |
-| published   | `page_age` / `age` when parseable    | `published_date`               | `publishedDate`                        |
+| Provider    | Without a key                                    | With a key                         |
+| ----------- | ------------------------------------------------ | ---------------------------------- |
+| `brave`     | not available                                    | Brave Search API                   |
+| `tavily`    | Tavily API, keyless access mode (small daily cap per IP) | Tavily API                 |
+| `exa`       | Exa's hosted MCP server (`web_search_exa`)       | Exa REST API                       |
+| `parallel`  | Parallel's search MCP server (`web_search`)      | same, with the key                 |
+| `firecrawl` | Firecrawl's MCP server (`firecrawl_search`)      | same, with the key                 |
+| `tinyfish`  | TinyFish's MCP server (`search`), keyless mode   | same, with the key (MCP session)   |
+
+Field mapping:
+
+| Field       | Brave Search API                     | Tavily                         | Exa (key: REST)                        | Exa (keyless: MCP) | Parallel | Firecrawl | TinyFish |
+| ----------- | ------------------------------------ | ------------------------------ | -------------------------------------- | ------------------ | -------- | --------- | -------- |
+| `query`     | `q`                                  | `query`                        | `query` (type `auto`)                  | `query` | `search_queries: [query]` | `query` | `query` |
+| `count`     | `count`                              | `max_results`                  | `numResults`                           | `numResults` | trimmed | `limit` | trimmed |
+| `freshness` | `freshness=pd/pw/pm/py`              | `time_range=day/week/month/year` | `startPublishedDate` = now − period  | hint in `objective` | hint in `objective` | `tbs=qdr:d/w/m/y` | `after_date` = now − period |
+| `site`      | append ` site:<host>` to `q`         | `include_domains: [host]`      | `includeDomains: [host]`               | hint in `objective` | ` site:<host>` in the query | `includeDomains: [host]` | `include_domains` |
+| `lang`      | `search_lang`                        | ignored                        | ignored                                | hint in `objective` | hint in `objective` | ignored | `language` |
+| snippet     | `description`                        | `content`                      | `highlights`/`summary`/text excerpt (request a short one) | `Highlights:` text | `excerpts` | `description` | `snippet` |
+| published   | `page_age` / `age` when parseable    | `published_date`               | `publishedDate`                        | `Published:` | `publish_date` | — | `date` |
+
+"Hint in `objective`" means the filter is put into the natural-language goal these tools take;
+results outside `site` are dropped by Tollgate either way (§6.1), so `site` is always enforced.
+`freshness` and `lang` are best effort for those providers.
 
 What each is good at (the admin puts this in the tool description so the agent can choose):
 Brave, a general web index, best for facts, names, news and keyword queries; Tavily, answer-oriented
 results with longer clean excerpts, good for direct questions; Exa, semantic search that finds pages
-by meaning, good for "pages like this", research and discovery.
+by meaning, good for "pages like this", research and discovery; Parallel, search built for AI
+agents that returns long excerpts from each page, good for research questions that need detail;
+Firecrawl, a general web index with search operators, good for keyword queries and recent pages;
+TinyFish, general web search with publication dates on many results, good for news and recent
+events.
 
 ---
 
@@ -287,7 +342,7 @@ may appear in `error` (`status`, `retry_after`).
 | HTTP | `code`               | When                                                                      |
 | ---- | -------------------- | ------------------------------------------------------------------------- |
 | 400  | `invalid_request`    | Bad JSON, missing/out-of-range field, query too long                      |
-| 400  | `provider_unavailable` | `provider` names a provider without an API key (or an unknown one) |
+| 400  | `provider_unavailable` | `provider` names a provider that can't search (Brave without a key, any provider without a key while keyless search is off) or an unknown one |
 | 400  | `insecure_url`       | Not `https`, a port other than 443, userinfo in the URL                   |
 | 403  | `scope_required`     | The key lacks `web`                                                       |
 | 403  | `blocked_domain`     | Host (or a redirect's host) is denied by the domain list / not allowed in allowlist mode |
@@ -297,9 +352,9 @@ may appear in `error` (`status`, `retry_after`).
 | 422  | `unsupported_type`   | Content type not HTML/XHTML/plain text/markdown (PDF if not supported yet) |
 | 422  | `no_content`         | Nothing readable was extracted                                            |
 | 502  | `fetch_failed`       | DNS failure, TLS error, connection reset, non-2xx from the site (`status` set) |
-| 502  | `search_failed`      | The search provider failed or returned garbage                            |
+| 502  | `search_failed`      | The search provider failed or returned garbage. When it was a rate limit (§3): `status: 429` and `retry_after` |
 | 503  | `disabled`           | Web tools switched off in Tollgate                                        |
-| 503  | `not_configured`     | `web_search` while no provider has an API key                             |
+| 503  | `not_configured`     | `web_search` while no provider can search (keyless search off and no API key) |
 | 504  | `timeout`            | Site or provider took longer than 10 s in total                           |
 | 429  | `rate_limited`       | Per-key limit hit; `Retry-After` header and `error.retry_after` (seconds) |
 
@@ -326,8 +381,9 @@ Network:
   `*.localhost`, `*.local`, `*.internal`, `*.lan`, `*.home.arpa` and bare single-label names are
   refused before resolving. IP-literal hosts are checked the same way.
 - Connect directly: ignore `proxy-url` and `HTTP(S)_PROXY` for web fetches, otherwise the
-  address check is meaningless. (Search provider calls go only to the three fixed provider API
-  hosts and may use the configured proxy.)
+  address check is meaningless. (Search provider calls go only to the fixed provider API hosts,
+  `api.search.brave.com`, `api.tavily.com`, `api.exa.ai`, `mcp.exa.ai`, `search.parallel.ai`,
+  `mcp.firecrawl.dev` and `agent.tinyfish.ai`, and may use the configured proxy.)
 - No cookies (no jar), no `Authorization`, no `Referer`. Request headers: `Accept:
   text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.1`, `Accept-Language` from `lang`
   hint or `tr,en;q=0.8`, and an honest `User-Agent`: `Mozilla/5.0 (compatible; CLI-Tollgate/<version>; +https://github.com/dylancetin/cli-tollgate)`.
@@ -365,9 +421,11 @@ Content:
 Settings UI (macOS SettingsView and Windows web UI, same strings in TR):
 
 - Section **Web access**: toggle *Let connected apps search and read the web* (default on; off →
-  `disabled`); one API key field per provider (Brave Search, Tavily, Exa; secure fields, each
-  with a *Get a key* link); a *Default search* picker listing the providers that have a key;
-  domain list mode (Block listed sites / Allow only listed sites) and a multi-line list.
+  `disabled`); toggle *Search without an API key* (default on); one optional API key field per
+  provider (Brave Search, Tavily, Exa, Parallel, Firecrawl, TinyFish; secure fields, each marked
+  *Works without a key* or *Key required* and with a *Get a key* link); a *Default search* picker
+  offering *Automatic* and the providers that can search; domain list mode (Block listed sites /
+  Allow only listed sites) and a multi-line list.
 - Stored in engine `config.yaml` under `web-tools:` and edited through the management API like
   other config (`GET/PUT /v8/management/config/web-tools`), hot-reloaded:
 
@@ -375,11 +433,15 @@ Settings UI (macOS SettingsView and Windows web UI, same strings in TR):
   web-tools:
     enabled: true
     search:
-      default: brave         # brave | tavily | exa
-      providers:
+      default: auto          # auto | brave | tavily | exa | parallel | firecrawl | tinyfish
+      keyless: true          # let providers that support it search without a key
+      providers:             # keys are optional except for Brave
         brave: { api-key: "" }
         tavily: { api-key: "" }
         exa: { api-key: "" }
+        parallel: { api-key: "" }
+        firecrawl: { api-key: "" }
+        tinyfish: { api-key: "" }
     domains:
       mode: denylist         # denylist | allowlist
       list: []
@@ -394,8 +456,8 @@ Settings UI (macOS SettingsView and Windows web UI, same strings in TR):
   slash on the path ignored); the query string must match too, so an injected page can't turn a
   link into an exfiltration channel. `http://` URLs are tried as `https://`. Anything else →
   `{ ok: false, code: "unknown_url" }` with a Turkish hint to search first or ask the user.
-- **Provider choice**: `webSearch` has an optional `provider` (`brave | tavily | exa`) whose
-  description says what each is good at (§3). When the probe lists two or more providers, the
+- **Provider choice**: `webSearch` has an optional `provider` (`brave | tavily | exa | parallel |
+  firecrawl | tinyfish`) whose description says what each is good at (§3). When the probe lists two or more providers, the
   system prompt names them and the default. A provider the probe didn't list is refused
   client-side without spending a search. A server `provider_unavailable` marks the probe stale
   and tells the agent to retry without `provider`.
@@ -438,11 +500,18 @@ Settings UI (macOS SettingsView and Windows web UI, same strings in TR):
   fetch `https://attacker/?q=<secret>`; the agent can only follow links that literally exist.
 - **No headless rendering in v1**: big dependency, larger attack surface; Readability covers
   most article pages. `render` is reserved in the probe and request.
-- **Search providers**: Brave, Tavily and Exa, each with its own key; the user picks a default
-  and the agent may name another per search (product decision). Brave is the suggested default
-  (own index, `freshness`, `search_lang` and `site:` support, plain REST). The probe lists only
-  providers with a key, so the agent is never offered one that can't answer. No automatic
-  fallback: silent provider switching would hide cost and quality differences.
+- **Search providers**: Brave, Tavily, Exa, Parallel, Firecrawl and TinyFish. All but Brave answer
+  without a key, so search works on a fresh install with zero setup; a key lifts the keyless
+  limits. The user picks a default or *Automatic*, and the agent may name a provider per search
+  (product decision). The probe lists only providers that can answer, so the agent is never
+  offered one that can't.
+- **Failover only on rate limits, only when no provider was named** (v1.1, replaces v1's "no
+  fallback"): keyless caps are small and hit often, and a `429` means the provider can't answer
+  at all, so answering from another provider beats an error. The response's `provider` says who
+  answered. Other failures are not retried elsewhere, so quality problems stay visible, and a
+  named provider is never swapped. With a key set, keyed providers are tried before keyless ones.
+- **Keyless can be switched off**: keyless calls send the query to the provider without an
+  account. A user who wants only their own keys used turns *Search without an API key* off.
 - **robots.txt ignored**: user-initiated single-page reads, same stance as a browser.
 
 ---
@@ -492,4 +561,61 @@ None of these change what the client sends or expects; they pin down details the
 - **IPv6**: only global unicast (`2000::/3`) is allowed, minus documentation, 6to4, Teredo and other
   `2001::/23` ranges; NAT64 (`64:ff9b::/96`) and IPv4-mapped addresses are checked as their IPv4
   address. If any resolved address is blocked the fetch is refused, even when another is public.
+- **Keyless endpoints** (checked live on 2026-11-17 with one real query each, no key): Tavily
+  (`X-Tavily-Access-Mode: keyless`, `X-Client-Name: cli-tollgate`; answers `429
+  daily_cap_reached` with `Retry-After` once the per-IP cap is spent), Exa
+  (`https://mcp.exa.ai/mcp`), Parallel (`https://search.parallel.ai/mcp`), Firecrawl
+  (`https://mcp.firecrawl.dev/v2/mcp`) and TinyFish (`https://agent.tinyfish.ai/mcp`,
+  `X-TinyFish-Access-Mode: keyless`) all returned results. `TestLiveKeylessSearch` in the engine
+  repeats the check (`TOLLGATE_LIVE_SEARCH=1`).
+- **MCP providers** are called with a single JSON-RPC `tools/call` POST (`Accept: application/json,
+  text/event-stream`); the reply is read as JSON or from SSE `data:` lines, no MCP SDK. Keyed
+  TinyFish calls first send `initialize` and `notifications/initialized` for an `Mcp-Session-Id`.
+  A tool result with `isError` whose text reads like a rate limit counts as `429`, one that reads
+  like a bad key as `401`. Markdown in their excerpts (links, headings, list markers, emphasis) is
+  reduced to plain text.
+- **Pauses** (rate-limit cooldowns) are in memory, per provider and per API key: setting a new key
+  for a paused provider lifts its pause. `Retry-After` may be seconds or an HTTP date; it is
+  capped at 24 h. The 10 s limit applies to each provider call, not to the whole failover chain
+  (failover only follows a `429`, which comes back fast).
+- **Auto mode stickiness** is per Tollgate API key (one per app), in memory, so it resets when the
+  engine restarts.
+- **Logging** with failover lists the providers tried in order: `web tools: search via
+  tavily>exa -> ok`.
+- **Rate limits** count a search once, however many providers it tries.
 
+---
+
+## Changes in v1.1
+
+Server (all additive; a v1 client keeps working unchanged):
+
+1. `GET /v1/tools`: `web_search.providers` now lists every provider that **can search** (key or
+   keyless), not only those with a key, and may contain `parallel`, `firecrawl` and `tinyfish`.
+   On a fresh install it is `["tavily", "exa", "parallel", "firecrawl", "tinyfish"]` and
+   `available` is `true` with no setup, where v1 said `not_configured`.
+2. `GET /v1/tools`: new `web_search.keyless` (providers answering without a key) and
+   `web_search.mode` (`"auto"` | `"default"`).
+3. `POST /v1/tools/web_search`: `provider` accepts `parallel`, `firecrawl` and `tinyfish`.
+4. `POST /v1/tools/web_search` without `provider`: on a provider `429`/`402` Tollgate fails over
+   to another provider; the response's `provider` names the one that answered.
+5. `search_failed` caused by rate limits carries `status: 429` and `retry_after` (and a
+   `Retry-After` header).
+6. `not_configured` now means "keyless search is off and no key is set".
+
+Client (`apps/admin`), to take advantage of it:
+
+- Accept `parallel`, `firecrawl` and `tinyfish` in the `webSearch` tool's `provider` enum and in
+  the client-side check against the probe's `providers` (until then they're ignored, which is
+  safe: the agent just can't name them, and the default still reaches them).
+- Add the three descriptions from §3 to the tool description.
+- Show the provider that answered from the response's `provider`, not the probe's `provider`,
+  since a failover can change it.
+- On `search_failed` with `status: 429`: tell the agent (Turkish) that search providers are busy
+  and to wait `retry_after` seconds or try another `provider` from the probe; if the call named a
+  `provider`, suggest retrying without it so Tollgate can fail over.
+- Optional: in the Connections view, say when search runs keyless (`keyless` non-empty) that the
+  free limits are lower and an API key in Tollgate lifts them; update the `not_configured` text
+  to "turn on search without a key or add a key in Tollgate".
+- Optional: when `mode` is `"auto"`, don't name a default provider in the system prompt as if it
+  were fixed.

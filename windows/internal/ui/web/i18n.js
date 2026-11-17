@@ -124,8 +124,17 @@ const TR = {
   "{0} API key": "{0} API anahtarı",
   "Get a key": "Anahtar al",
   "Default search": "Varsayılan arama",
-  "Add an API key to enable search. Reading pages works without one.":
-    "Aramayı etkinleştirmek için bir API anahtarı ekleyin. Sayfaları okumak anahtarsız da çalışır.",
+  "Search without an API key": "API anahtarı olmadan ara",
+  "Most providers work without a key, with lower limits. Adding a key lifts them.":
+    "Çoğu sağlayıcı anahtarsız da çalışır, ancak sınırları daha düşüktür. Anahtar eklerseniz bu sınırlar kalkar.",
+  "Works without a key": "Anahtarsız çalışır",
+  "Key required": "Anahtar gerekli",
+  "API key (optional)": "Anahtar (isteğe bağlı)",
+  Automatic: "Otomatik",
+  "Picks a provider for each app and moves on to another when one is busy.":
+    "Her uygulama için bir sağlayıcı seçer, biri yoğunsa diğerine geçer.",
+  "Add an API key or allow search without one. Reading pages works either way.":
+    "Bir API anahtarı ekleyin veya anahtarsız aramaya izin verin. Sayfaları okumak her durumda çalışır.",
   "Site list": "Site listesi",
   "Block listed sites": "Listedeki siteleri engelle",
   "Allow only listed sites": "Yalnızca listedeki sitelere izin ver",

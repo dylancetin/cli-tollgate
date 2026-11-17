@@ -13,7 +13,18 @@ import (
 const webToolsPath = "/v8/management/config/web-tools"
 
 // SearchProviders is the fixed provider set, in the order they are offered.
-var SearchProviders = []string{"brave", "tavily", "exa"}
+var SearchProviders = []string{"brave", "tavily", "exa", "parallel", "firecrawl", "tinyfish"}
+
+// SearchAuto is the default that lets the engine pick a provider and move on
+// to another one when a provider is rate limited.
+const SearchAuto = "auto"
+
+// keylessProviders search without an API key (with lower limits). Brave has
+// no keyless mode.
+var keylessProviders = map[string]bool{"tavily": true, "exa": true, "parallel": true, "firecrawl": true, "tinyfish": true}
+
+// SupportsKeyless reports whether a provider can search without an API key.
+func SupportsKeyless(name string) bool { return keylessProviders[name] }
 
 const (
 	DomainsDenylist  = "denylist"
@@ -27,7 +38,10 @@ type WebProvider struct {
 
 // WebSearch is the search part of the config.
 type WebSearch struct {
-	Default   string                 `json:"default"`
+	// Default is "auto" or a provider name.
+	Default string `json:"default"`
+	// Keyless lets providers that support it search without an API key.
+	Keyless   bool                   `json:"keyless"`
 	Providers map[string]WebProvider `json:"providers"`
 }
 
@@ -46,7 +60,7 @@ type WebTools struct {
 
 // DefaultWebTools is what an engine without a `web-tools` section behaves like.
 func DefaultWebTools() WebTools {
-	w := WebTools{Enabled: true}
+	w := WebTools{Enabled: true, Search: WebSearch{Default: SearchAuto, Keyless: true}}
 	w.Normalize()
 	return w
 }
@@ -73,13 +87,10 @@ func (w *WebTools) Normalize() {
 		providers[p] = WebProvider{APIKey: strings.TrimSpace(providers[p].APIKey)}
 	}
 	w.Search.Providers = providers
-	// The default must be a provider that can search; otherwise pick the first that can.
-	if w.Search.Providers[w.Search.Default].APIKey == "" || !isSearchProvider(w.Search.Default) {
-		if with := w.ProvidersWithKeys(); len(with) > 0 {
-			w.Search.Default = with[0]
-		} else if !isSearchProvider(w.Search.Default) {
-			w.Search.Default = SearchProviders[0]
-		}
+	// The default is "auto" or a provider that can search; the engine treats
+	// any other value as "auto", so store it that way.
+	if w.Search.Default != SearchAuto && !w.CanSearch(w.Search.Default) {
+		w.Search.Default = SearchAuto
 	}
 	if w.Domains.Mode != DomainsAllowlist {
 		w.Domains.Mode = DomainsDenylist
@@ -96,11 +107,20 @@ func isSearchProvider(name string) bool {
 	return false
 }
 
-// ProvidersWithKeys lists the providers that have an API key, in offer order.
-func (w WebTools) ProvidersWithKeys() []string {
+// CanSearch reports whether a provider can answer: it has an API key, or it
+// supports keyless use and keyless use is on.
+func (w WebTools) CanSearch(name string) bool {
+	if !isSearchProvider(name) {
+		return false
+	}
+	return strings.TrimSpace(w.Search.Providers[name].APIKey) != "" || (w.Search.Keyless && SupportsKeyless(name))
+}
+
+// UsableProviders lists the providers that can search, in offer order.
+func (w WebTools) UsableProviders() []string {
 	out := []string{}
 	for _, p := range SearchProviders {
-		if w.Search.Providers[p].APIKey != "" {
+		if w.CanSearch(p) {
 			out = append(out, p)
 		}
 	}

@@ -60,7 +60,7 @@ func TestLoadWebToolsDefaultsOn404(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !w.Enabled || w.Search.Default != "brave" || w.Domains.Mode != DomainsDenylist || len(w.Domains.List) != 0 {
+	if !w.Enabled || w.Search.Default != SearchAuto || !w.Search.Keyless || w.Domains.Mode != DomainsDenylist || len(w.Domains.List) != 0 {
 		t.Fatalf("defaults: %+v", w)
 	}
 	for _, p := range SearchProviders {
@@ -68,8 +68,9 @@ func TestLoadWebToolsDefaultsOn404(t *testing.T) {
 			t.Errorf("provider %s missing from defaults", p)
 		}
 	}
-	if len(w.ProvidersWithKeys()) != 0 {
-		t.Fatal("no keys by default")
+	// Zero setup: every provider but Brave can search without a key.
+	if got, want := w.UsableProviders(), []string{"tavily", "exa", "parallel", "firecrawl", "tinyfish"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("usable by default = %v, want %v", got, want)
 	}
 }
 
@@ -83,7 +84,7 @@ func TestWebToolsToleratesMissingAndNullFields(t *testing.T) {
 		if err := json.Unmarshal([]byte(body), &w); err != nil {
 			t.Fatalf("%s: %v", body, err)
 		}
-		if !w.Enabled || w.Domains.List == nil || w.Search.Providers["exa"].APIKey != "" || w.Domains.Mode != DomainsDenylist {
+		if !w.Enabled || !w.Search.Keyless || w.Search.Default != SearchAuto || w.Domains.List == nil || w.Search.Providers["exa"].APIKey != "" || w.Domains.Mode != DomainsDenylist {
 			t.Errorf("%s -> %+v", body, w)
 		}
 	}
@@ -102,6 +103,7 @@ func TestWebToolsRoundTrip(t *testing.T) {
 		Enabled: false,
 		Search: WebSearch{
 			Default: "tavily",
+			Keyless: true,
 			Providers: map[string]WebProvider{
 				"brave":  {APIKey: ""},
 				"tavily": {APIKey: " tvly-123 "},
@@ -120,7 +122,7 @@ func TestWebToolsRoundTrip(t *testing.T) {
 	// The whole object goes out, with the engine's key names.
 	search := sent["search"].(map[string]any)
 	providers := search["providers"].(map[string]any)
-	if sent["enabled"] != false || search["default"] != "tavily" || len(providers) != 3 {
+	if sent["enabled"] != false || search["default"] != "tavily" || search["keyless"] != true || len(providers) != len(SearchProviders) {
 		t.Fatalf("sent: %s", f.saved)
 	}
 	if providers["tavily"].(map[string]any)["api-key"] != "tvly-123" {
@@ -139,35 +141,37 @@ func TestWebToolsRoundTrip(t *testing.T) {
 	}
 }
 
-func TestProvidersWithKeysAndDefault(t *testing.T) {
+func TestUsableProvidersAndDefault(t *testing.T) {
 	w := DefaultWebTools()
+	w.Search.Keyless = false
 	w.Search.Providers["exa"] = WebProvider{APIKey: "k"}
 	w.Search.Providers["tavily"] = WebProvider{APIKey: "k"}
-	if got, want := w.ProvidersWithKeys(), []string{"tavily", "exa"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("ProvidersWithKeys = %v, want %v", got, want)
+	if got, want := w.UsableProviders(), []string{"tavily", "exa"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("UsableProviders = %v, want %v", got, want)
 	}
-	// "brave" has no key, so the default moves to the first provider that does.
-	w.Normalize()
-	if w.Search.Default != "tavily" {
-		t.Fatalf("default = %q", w.Search.Default)
-	}
-	// A default with a key is left alone.
+	// A default that can search is left alone.
 	w.Search.Default = "exa"
 	w.Normalize()
 	if w.Search.Default != "exa" {
 		t.Fatalf("default = %q", w.Search.Default)
 	}
-	// Removing every key keeps a valid provider name.
-	w.Search.Providers["exa"] = WebProvider{}
-	w.Search.Providers["tavily"] = WebProvider{}
+	// "brave" without a key can't search, so the default becomes auto.
+	w.Search.Default = "brave"
 	w.Normalize()
-	if !isSearchProvider(w.Search.Default) || len(w.ProvidersWithKeys()) != 0 {
-		t.Fatalf("after clearing keys: %+v", w)
+	if w.Search.Default != SearchAuto {
+		t.Fatalf("default = %q", w.Search.Default)
+	}
+	// Keyless providers can be the default without a key while keyless is on.
+	w.Search.Keyless = true
+	w.Search.Default = "tinyfish"
+	w.Normalize()
+	if w.Search.Default != "tinyfish" || !w.CanSearch("parallel") || w.CanSearch("brave") {
+		t.Fatalf("keyless default: %+v", w.Search)
 	}
 	// Unknown modes and providers are repaired.
 	w.Domains.Mode, w.Search.Default = "weird", "bing"
 	w.Normalize()
-	if w.Domains.Mode != DomainsDenylist || w.Search.Default != "brave" {
+	if w.Domains.Mode != DomainsDenylist || w.Search.Default != SearchAuto {
 		t.Fatalf("repair: %+v", w)
 	}
 }
@@ -179,7 +183,7 @@ func TestAppRefreshAndSetWebTools(t *testing.T) {
 	a.Engine.port, a.Engine.password, a.Engine.state = m.Port, m.Password, EngineRunning
 
 	a.RefreshSettings()
-	if w := a.WebTools(); !w.Enabled || w.Search.Default != "brave" {
+	if w := a.WebTools(); !w.Enabled || w.Search.Default != SearchAuto {
 		t.Fatalf("defaults after 404: %+v", w)
 	}
 	if got := a.Snapshot().WebTools; !got.Enabled {
@@ -195,7 +199,7 @@ func TestAppRefreshAndSetWebTools(t *testing.T) {
 	}
 	a.RefreshSettings()
 	got := a.WebTools()
-	if got.Enabled || got.Search.Providers["exa"].APIKey != "exa-key" || got.Search.Default != "exa" {
+	if got.Enabled || got.Search.Providers["exa"].APIKey != "exa-key" || got.Search.Default != SearchAuto || !got.Search.Keyless {
 		t.Fatalf("after save and reload: %+v", got)
 	}
 }

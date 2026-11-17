@@ -325,7 +325,13 @@ struct AccessGrantList: Decodable {
 /// The engine's `web-tools` config section. It is always sent whole.
 struct WebToolsConfig: Codable, Equatable {
     /// Search providers in the order they are offered.
-    static let providerIDs = ["brave", "tavily", "exa"]
+    static let providerIDs = ["brave", "tavily", "exa", "parallel", "firecrawl", "tinyfish"]
+
+    /// Providers that search without an API key (with lower limits). Brave has no keyless mode.
+    static let keylessProviderIDs: Set<String> = ["tavily", "exa", "parallel", "firecrawl", "tinyfish"]
+
+    /// The default that lets the engine pick a provider and move on when one is rate limited.
+    static let autoProvider = "auto"
 
     struct ProviderEntry: Codable, Equatable {
         var apiKey: String
@@ -341,22 +347,28 @@ struct WebToolsConfig: Codable, Equatable {
     }
 
     struct Search: Codable, Equatable {
+        /// "auto" or a provider ID.
         var defaultProvider: String
+        /// Lets providers that support it search without an API key.
+        var keyless: Bool
         var providers: [String: ProviderEntry]
 
         enum CodingKeys: String, CodingKey {
             case defaultProvider = "default"
+            case keyless
             case providers
         }
 
-        init(defaultProvider: String = "brave", providers: [String: ProviderEntry] = [:]) {
+        init(defaultProvider: String = WebToolsConfig.autoProvider, keyless: Bool = true, providers: [String: ProviderEntry] = [:]) {
             self.defaultProvider = defaultProvider
+            self.keyless = keyless
             self.providers = providers
         }
 
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
-            defaultProvider = try container.decodeIfPresent(String.self, forKey: .defaultProvider) ?? "brave"
+            defaultProvider = try container.decodeIfPresent(String.self, forKey: .defaultProvider) ?? WebToolsConfig.autoProvider
+            keyless = try container.decodeIfPresent(Bool.self, forKey: .keyless) ?? true
             providers = try container.decodeIfPresent([String: ProviderEntry].self, forKey: .providers) ?? [:]
         }
     }
@@ -402,9 +414,17 @@ struct WebToolsConfig: Codable, Equatable {
         normalize()
     }
 
-    /// Providers that have an API key, in the order they are offered.
-    var providersWithKeys: [String] {
-        Self.providerIDs.filter { !(search.providers[$0]?.apiKey ?? "").isEmpty }
+    /// Whether a provider can search: it has an API key, or it works without
+    /// one and keyless search is on.
+    func canSearch(_ provider: String) -> Bool {
+        guard Self.providerIDs.contains(provider) else { return false }
+        let key = apiKey(for: provider).trimmingCharacters(in: .whitespacesAndNewlines)
+        return !key.isEmpty || (search.keyless && Self.keylessProviderIDs.contains(provider))
+    }
+
+    /// Providers that can search, in the order they are offered.
+    var usableProviders: [String] {
+        Self.providerIDs.filter { canSearch($0) }
     }
 
     func apiKey(for provider: String) -> String { search.providers[provider]?.apiKey ?? "" }
@@ -413,19 +433,16 @@ struct WebToolsConfig: Codable, Equatable {
         search.providers[provider] = ProviderEntry(apiKey: key)
     }
 
-    /// Trims keys, fills in every provider, keeps the default on a provider that
-    /// has a key, and cleans the site list (one hostname each, lowercase, no repeats).
+    /// Trims keys, fills in every provider, keeps the default on "auto" or a
+    /// provider that can search, and cleans the site list (one hostname each,
+    /// lowercase, no repeats).
     mutating func normalize() {
         for id in Self.providerIDs {
             search.providers[id] = ProviderEntry(apiKey: apiKey(for: id).trimmingCharacters(in: .whitespacesAndNewlines))
         }
-        let known = Self.providerIDs.contains(search.defaultProvider)
-        if !known || apiKey(for: search.defaultProvider).isEmpty {
-            if let first = providersWithKeys.first {
-                search.defaultProvider = first
-            } else if !known {
-                search.defaultProvider = Self.providerIDs[0]
-            }
+        // The engine treats any other default as "auto", so store it that way.
+        if search.defaultProvider != Self.autoProvider && !canSearch(search.defaultProvider) {
+            search.defaultProvider = Self.autoProvider
         }
         if domains.mode != "allowlist" { domains.mode = "denylist" }
         domains.list = Self.cleanDomains(domains.list)
