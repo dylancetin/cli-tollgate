@@ -142,6 +142,28 @@ How it differs from the Mac app under the hood:
 - Updates: the release has a `latest-windows.json` feed. The app checks it daily, downloads newer installers,
   verifies them, and installs on quit (or right away with **Restart to update**).
 
+## Headless (a server already running the engine)
+
+On a machine that already runs the fork as a service, for example a Linux box reached over Tailscale,
+you don't need either app. Web tools, cloaking and access grants are all built into the engine.
+`tollgatectl` replaces the app's **Connected apps** screen and its Allow / Deny prompt. It talks to
+the engine's management API on loopback, so run it on that machine:
+
+```sh
+cd windows && go build -trimpath -o ~/.local/bin/tollgatectl ./cmd/tollgatectl
+
+tollgatectl grant --name "Admin panel" --scopes models,web   # prints a new revocable key, once
+tollgatectl apps                                             # list connected apps
+tollgatectl revoke <id>                                      # turn that app's key off
+tollgatectl watch                                            # answer access requests in the terminal
+```
+
+It reads the management password from `~/.config/cliproxyapi/management-password` (`--password-file`)
+and uses port 8317 (`--port`). Keys from `grant` work from any client that can reach the engine. The
+`POST /access/requests` flow still only accepts programs on that machine, and only while
+`watch` is running. Each grant or revoke makes the engine save `config.yaml`, which rewrites its
+formatting (comments can move). `scripts/verify-tollgatectl.sh` runs the whole cycle against a live engine.
+
 ## How it works
 
 ```

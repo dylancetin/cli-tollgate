@@ -1,0 +1,16 @@
+step	kind	decision_or_hypothesis	evidence	verdict
+1	ground	beelinkk's cliproxyapi.service runs the same engine commit as engine/ (cb7692eb6), so a second engine is not needed	`cli-proxy-api --help` banner "Commit: cb7692eb6"; `git submodule status` = cb7692eb6	VERIFIED
+2	ground	Tollgate engine routes are already live on :8317	POST /access/requests → 400 (empty body); POST /v1/tools/web_search without key → 401	VERIFIED
+3	decision	User: goal = web search for apps (+ maybe connected-app management); topology = sidecar; clients = Tailscale; approval = terminal	AskUserQuestion round 1	-
+4	experiment	Web search already works with the user's own keys (own keys carry every scope; web-tools default on)	POST /v1/tools/web_search via 127.0.0.1 and 100.119.176.63 → 200, provider exa	VERIFIED
+5	decision	User: CLI that mints per-app keys; no engine change (Tailscale clients keep using keys, request flow stays loopback-only)	AskUserQuestion round 2	-
+6	design	tollgatectl = windows/cmd/tollgatectl reusing internal/core.Management; grant = become the watcher (list poll) → loopback POST /access/requests with Origin tollgatectl → approve → wait until key answers 200	engine access_requests.go: watcher window 75s, approve appends to access.api-keys and reloads config	-
+7	baseline	Pre-run state captured; config backed up to config.yaml.backup-20261124-tollgatectl	pid=2020, 5 api-keys, no access-grants.json	-
+8	unit	tollgatectl builds, vets, lists apps read-only	go vet ./cmd/tollgatectl clean; `tollgatectl apps` → "No connected apps."	VERIFIED
+9	unit	Full grant/scope/revoke cycle from the Tailscale IP	scripts/verify-tollgatectl.sh … 100.119.176.63 → 15/15 VERIFIED, exit 0	VERIFIED
+10	finding	Engine's management save rewrites config.yaml: adds web-tools defaults block, moves 2 comments (oauth.providers moved above excluded-models). Parsed settings identical. Pre-existing engine behavior (dashboard saves do the same)	diff vs backup; python yaml compare → equal apart from web-tools	VERIFIED
+11	decision	Restore the user's original config.yaml from the backup after each test run; encode the settings check as a gate in the verify script	diff -q config.yaml backup → identical; /v1/models 200 after reload	-
+12	unit	Verify script with the new gate (other settings unchanged)	rerun → 16/16 VERIFIED, exit 0; config restored again	VERIFIED
+13	unit	watch: allow path, deny path, revoke, and no_approver once watch stops	A approved → key 200; D denied → key 401; revoked → 401; after 80s → {"code":"no_approver"}	VERIFIED
+14	unit	Repo still green; Windows build of the new command	go test ./... ok; GOOS=windows go build ./cmd/tollgatectl ok	VERIFIED
+15	deliver	Installed ~/.local/bin/tollgatectl; config.yaml identical to original; engine PID 2020 unchanged; usage-collector active	diff -q; systemctl show MainPID	VERIFIED
